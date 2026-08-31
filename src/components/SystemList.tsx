@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Sparkles, Layers } from 'lucide-react';
+import { Plus, Sparkles, Layers, Activity } from 'lucide-react';
 import { TransferFunction } from '../core/types';
 import { SystemCard } from './SystemCard';
 
@@ -10,6 +10,7 @@ interface SystemListProps {
   onDuplicateSystem: (system: TransferFunction) => void;
   onDeleteSystem: (id: string) => void;
   onOpenPresets: () => void;
+  onViewGraphs?: () => void;
 }
 
 export const SystemList: React.FC<SystemListProps> = ({
@@ -19,7 +20,10 @@ export const SystemList: React.FC<SystemListProps> = ({
   onDuplicateSystem,
   onDeleteSystem,
   onOpenPresets,
+  onViewGraphs,
 }) => {
+  const visibleCount = systems.filter(s => s.visible).length;
+
   return (
     <aside className="flex flex-col h-full bg-slate-50/70 dark:bg-slate-950/70 border-r border-slate-200 dark:border-slate-800/80 w-full lg:w-[380px] xl:w-[410px] flex-shrink-0 overflow-hidden transition-colors">
       {/* Header Actions - Fixed at top of list */}
@@ -74,7 +78,21 @@ export const SystemList: React.FC<SystemListProps> = ({
             </button>
           </div>
         )}
+
+        {/* Mobile Quick Action to View Graphs */}
+        {onViewGraphs && systems.length > 0 && (
+          <div className="pt-2 pb-6 lg:hidden">
+            <button
+              onClick={onViewGraphs}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-sm shadow-lg shadow-cyan-600/25 active:scale-98 transition-all"
+            >
+              <Activity className="w-4 h-4" />
+              <span>Ver Gráficos ({visibleCount} visíveis) →</span>
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );
 };
+

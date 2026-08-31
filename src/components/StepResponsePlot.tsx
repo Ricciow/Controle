@@ -109,16 +109,16 @@ export const StepResponsePlot: React.FC<StepResponsePlotProps> = ({ systems }) =
     return ticks;
   }, [minY, maxY]);
 
-  // Pixel-perfect SVG coordinate calculation using getScreenCTM()
-  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+  // Pixel-perfect SVG coordinate calculation using getScreenCTM() for Mouse and Touch
+  const updatePointerPosition = (clientX: number, clientY: number) => {
     if (!svgRef.current || !containerRef.current) return;
     const svg = svgRef.current;
     const ctm = svg.getScreenCTM();
     if (!ctm) return;
 
     const pt = svg.createSVGPoint();
-    pt.x = e.clientX;
-    pt.y = e.clientY;
+    pt.x = clientX;
+    pt.y = clientY;
     const svgPoint = pt.matrixTransform(ctm.inverse());
 
     if (svgPoint.x >= padding.left && svgPoint.x <= width - padding.right &&
@@ -127,12 +127,22 @@ export const StepResponsePlot: React.FC<StepResponsePlotProps> = ({ systems }) =
 
       const contRect = containerRef.current.getBoundingClientRect();
       setMousePos({
-        x: e.clientX - contRect.left,
-        y: e.clientY - contRect.top
+        x: clientX - contRect.left,
+        y: clientY - contRect.top
       });
     } else {
       setHoverSvgX(null);
       setMousePos(null);
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    updatePointerPosition(e.clientX, e.clientY);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<SVGSVGElement>) => {
+    if (e.touches.length > 0) {
+      updatePointerPosition(e.touches[0].clientX, e.touches[0].clientY);
     }
   };
 
@@ -184,7 +194,7 @@ export const StepResponsePlot: React.FC<StepResponsePlotProps> = ({ systems }) =
       {/* SVG Canvas Area */}
       <div 
         ref={containerRef}
-        className="relative flex-1 bg-slate-50/50 dark:bg-slate-950 select-none overflow-hidden min-h-0"
+        className="relative flex-1 bg-slate-50/50 dark:bg-slate-950 select-none overflow-hidden min-h-0 touch-none"
       >
         <svg
           ref={svgRef}
@@ -193,6 +203,9 @@ export const StepResponsePlot: React.FC<StepResponsePlotProps> = ({ systems }) =
           preserveAspectRatio="xMidYMid meet"
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
+          onTouchStart={handleTouchMove}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleMouseLeave}
         >
           {/* Grid Background Lines */}
           {xTicks.map(t => {
@@ -343,8 +356,8 @@ export const StepResponsePlot: React.FC<StepResponsePlotProps> = ({ systems }) =
           <div 
             className="absolute z-50 pointer-events-none p-2.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl text-xs space-y-1 text-slate-800 dark:text-slate-200 min-w-44 transition-transform"
             style={{
-              left: `${Math.min(mousePos.x + 12, (containerRef.current?.clientWidth || 400) - 190)}px`,
-              top: `${Math.max(12, Math.min(mousePos.y - 20, (containerRef.current?.clientHeight || 300) - 120))}px`
+              left: `${Math.max(8, Math.min(mousePos.x + 12, (containerRef.current?.clientWidth || 360) - 190))}px`,
+              top: `${Math.max(8, Math.min(mousePos.y - 20, (containerRef.current?.clientHeight || 280) - 120))}px`
             }}
           >
             <div className="font-semibold text-cyan-600 dark:text-cyan-400 flex items-center gap-1.5 pb-1 border-b border-slate-200 dark:border-slate-800">

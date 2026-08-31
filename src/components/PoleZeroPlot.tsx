@@ -82,6 +82,13 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
     { zeta: 0.9, angle: Math.acos(0.9) },
   ];
 
+  // Touch state for pan & pinch-zoom
+  const touchStateRef = useRef<{
+    lastX: number;
+    lastY: number;
+    lastDist: number | null;
+  } | null>(null);
+
   // Mouse pan handlers
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -101,6 +108,50 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
     setIsDragging(false);
   };
 
+  // Touch pan & pinch zoom handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      touchStateRef.current = {
+        lastX: t.clientX,
+        lastY: t.clientY,
+        lastDist: null
+      };
+    } else if (e.touches.length === 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      touchStateRef.current = {
+        lastX: (t1.clientX + t2.clientX) / 2,
+        lastY: (t1.clientY + t2.clientY) / 2,
+        lastDist: dist
+      };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStateRef.current) return;
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      const dx = t.clientX - touchStateRef.current.lastX;
+      const dy = t.clientY - touchStateRef.current.lastY;
+      setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+      touchStateRef.current.lastX = t.clientX;
+      touchStateRef.current.lastY = t.clientY;
+    } else if (e.touches.length === 2 && touchStateRef.current.lastDist !== null) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const currentDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const factor = currentDist / touchStateRef.current.lastDist;
+      setZoom(prev => Math.max(0.2, Math.min(10, prev * factor)));
+      touchStateRef.current.lastDist = currentDist;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchStateRef.current = null;
+  };
+
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
@@ -113,7 +164,8 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
   };
 
   const handleRootEnter = (
-    e: React.MouseEvent,
+    clientX: number,
+    clientY: number,
     sysName: string,
     sysColor: string,
     type: 'pole' | 'zero',
@@ -126,8 +178,8 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
       color: sysColor,
       type,
       root,
-      screenX: e.clientX - rect.left,
-      screenY: e.clientY - rect.top
+      screenX: clientX - rect.left,
+      screenY: clientY - rect.top
     });
   };
 
@@ -197,11 +249,14 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
       {/* SVG Canvas Area */}
       <div 
         ref={containerRef}
-        className="relative flex-1 bg-slate-50/50 dark:bg-slate-950 cursor-crosshair select-none overflow-hidden min-h-0"
+        className="relative flex-1 bg-slate-50/50 dark:bg-slate-950 cursor-crosshair select-none overflow-hidden min-h-0 touch-none"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         onWheel={handleWheel}
       >
         <svg 
@@ -226,22 +281,22 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
 
                 {/* Tick Labels */}
                 {posRight < width && (
-                  <text x={posRight} y={cy + 14} fill="#64748b" fontSize="9" textAnchor="middle" className="font-mono select-none">
+                  <text x={posRight} y={cy + 14} fill="#64748b" fontSize="10" textAnchor="middle" className="font-mono select-none">
                     +{v}
                   </text>
                 )}
                 {posLeft > 0 && (
-                  <text x={posLeft} y={cy + 14} fill="#64748b" fontSize="9" textAnchor="middle" className="font-mono select-none">
+                  <text x={posLeft} y={cy + 14} fill="#64748b" fontSize="10" textAnchor="middle" className="font-mono select-none">
                     -{v}
                   </text>
                 )}
                 {posTop > 0 && (
-                  <text x={cx + 6} y={posTop + 3} fill="#64748b" fontSize="9" textAnchor="start" className="font-mono select-none">
+                  <text x={cx + 6} y={posTop + 3} fill="#64748b" fontSize="10" textAnchor="start" className="font-mono select-none">
                     +{v}j
                   </text>
                 )}
                 {posBottom < height && (
-                  <text x={cx + 6} y={posBottom + 3} fill="#64748b" fontSize="9" textAnchor="start" className="font-mono select-none">
+                  <text x={cx + 6} y={posBottom + 3} fill="#64748b" fontSize="10" textAnchor="start" className="font-mono select-none">
                     -{v}j
                   </text>
                 )}
@@ -279,7 +334,7 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
               <g key={`zeta-${zeta}`} stroke="#a855f7" strokeWidth="0.7" strokeDasharray="3 3" opacity="0.45">
                 <line x1={cx} y1={cy} x2={x1} y2={y1} />
                 <line x1={cx} y1={cy} x2={x1} y2={y2} />
-                <text x={x1 + 4} y={y1 - 2} fill="#9333ea" className="dark:fill-purple-300 font-mono" fontSize="9" textAnchor="start">
+                <text x={x1 + 4} y={y1 - 2} fill="#9333ea" className="dark:fill-purple-300 font-mono" fontSize="10" textAnchor="start">
                   ζ={zeta}
                 </text>
               </g>
@@ -315,11 +370,21 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
                     <g
                       key={`zero-${sys.id}-${idx}`}
                       className="cursor-pointer"
-                      onMouseEnter={(e) => handleRootEnter(e, sys.name, sys.color, 'zero', z)}
+                      onMouseEnter={(e) => handleRootEnter(e.clientX, e.clientY, sys.name, sys.color, 'zero', z)}
                       onMouseLeave={() => setHoveredRoot(null)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRootEnter(e.clientX, e.clientY, sys.name, sys.color, 'zero', z);
+                      }}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                        if (e.touches.length > 0) {
+                          handleRootEnter(e.touches[0].clientX, e.touches[0].clientY, sys.name, sys.color, 'zero', z);
+                        }
+                      }}
                     >
                       {/* Invisible larger hit target */}
-                      <circle cx={pt.x} cy={pt.y} r={16} fill="transparent" />
+                      <circle cx={pt.x} cy={pt.y} r={18} fill="transparent" />
                       <circle
                         cx={pt.x}
                         cy={pt.y}
@@ -341,11 +406,21 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
                     <g
                       key={`pole-${sys.id}-${idx}`}
                       className="cursor-pointer"
-                      onMouseEnter={(e) => handleRootEnter(e, sys.name, sys.color, 'pole', p)}
+                      onMouseEnter={(e) => handleRootEnter(e.clientX, e.clientY, sys.name, sys.color, 'pole', p)}
                       onMouseLeave={() => setHoveredRoot(null)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRootEnter(e.clientX, e.clientY, sys.name, sys.color, 'pole', p);
+                      }}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                        if (e.touches.length > 0) {
+                          handleRootEnter(e.touches[0].clientX, e.touches[0].clientY, sys.name, sys.color, 'pole', p);
+                        }
+                      }}
                     >
                       {/* Invisible larger hit target */}
-                      <circle cx={pt.x} cy={pt.y} r={16} fill="transparent" />
+                      <circle cx={pt.x} cy={pt.y} r={18} fill="transparent" />
                       {/* Glow background */}
                       <circle cx={pt.x} cy={pt.y} r={9} fill={sys.color} opacity="0.2" />
                       <line
@@ -379,8 +454,8 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
           <div
             className="absolute z-50 pointer-events-none transform -translate-x-1/2 -translate-y-full -mt-3 p-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl text-xs space-y-1.5 w-56 text-slate-800 dark:text-slate-100"
             style={{
-              left: `${hoveredRoot.screenX}px`,
-              top: `${hoveredRoot.screenY}px`
+              left: `${Math.max(120, Math.min(hoveredRoot.screenX, (containerRef.current?.clientWidth || 360) - 120))}px`,
+              top: `${Math.max(130, Math.min(hoveredRoot.screenY, (containerRef.current?.clientHeight || 280) - 10))}px`
             }}
           >
             <div className="flex items-center justify-between pb-1 border-b border-slate-200 dark:border-slate-800">

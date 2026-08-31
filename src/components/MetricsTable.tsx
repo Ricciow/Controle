@@ -17,8 +17,9 @@ export const MetricsTable: React.FC<MetricsTableProps> = ({ systems }) => {
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60">
         <div className="flex items-center gap-2">
           <Table className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-          <h3 className="font-semibold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-100">
-            Tabela Comparativa de Desempenho e Estabilidade
+          <h3 className="font-semibold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-100 flex items-center">
+            Tabela Comparativa
+            <span className="text-[10px] text-slate-400 font-normal ml-2 sm:hidden">(deslize →)</span>
           </h3>
         </div>
         <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -28,10 +29,12 @@ export const MetricsTable: React.FC<MetricsTableProps> = ({ systems }) => {
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs">
+        <table className="w-full text-left text-xs border-collapse">
           <thead className="bg-slate-50 dark:bg-slate-950/80 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 font-semibold uppercase tracking-wider text-[10px]">
             <tr>
-              <th className="px-4 py-3">Sistema</th>
+              <th className="sticky left-0 bg-slate-50 dark:bg-slate-950 z-20 px-4 py-3 border-r border-slate-200 dark:border-slate-800 shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#1e293b]">
+                Sistema
+              </th>
               <th className="px-4 py-3">Função H(s)</th>
               <th className="px-4 py-3 text-center">Estabilidade</th>
               <th className="px-4 py-3">Polos</th>
@@ -53,8 +56,8 @@ export const MetricsTable: React.FC<MetricsTableProps> = ({ systems }) => {
 
               return (
                 <tr key={sys.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                  {/* Name & Color */}
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  {/* Name & Color (Sticky on horizontal scroll) */}
+                  <td className="sticky left-0 bg-white dark:bg-slate-900 z-10 px-4 py-3 whitespace-nowrap border-r border-slate-200 dark:border-slate-800 shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#1e293b]">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: sys.color }} />
                       <span className="font-bold text-slate-900 dark:text-slate-100">{sys.name}</span>

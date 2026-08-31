@@ -109,13 +109,13 @@ export const SystemCard: React.FC<SystemCardProps> = ({
             type="text"
             value={system.name}
             onChange={(e) => onUpdate({ ...system, name: e.target.value })}
-            className="bg-transparent font-semibold text-sm text-slate-900 dark:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 focus:bg-slate-100 dark:focus:bg-slate-800 focus:outline-none px-1.5 py-0.5 rounded transition-colors w-32"
+            className="bg-transparent font-semibold text-sm text-slate-900 dark:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 focus:bg-slate-100 dark:focus:bg-slate-800 focus:outline-none px-1.5 py-0.5 rounded transition-colors w-28 sm:w-36 min-w-0"
             placeholder="Nome do sistema"
           />
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={() => onUpdate({ ...system, visible: !system.visible })}
             className={`p-1.5 rounded-lg transition-colors ${
@@ -147,23 +147,23 @@ export const SystemCard: React.FC<SystemCardProps> = ({
       </div>
 
       {/* Body */}
-      <div className="p-4 space-y-3">
+      <div className="p-3.5 sm:p-4 space-y-3">
         {/* Input Mode Selector */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center bg-slate-100 dark:bg-slate-950/80 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-950/80 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[11px] sm:text-xs">
             <button
               onClick={() => handleModeChange('expression')}
-              className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+              className={`px-2 sm:px-2.5 py-1 rounded-md font-medium transition-all ${
                 system.inputMode === 'expression'
                   ? 'bg-cyan-600 text-white shadow-sm font-semibold'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              Expressão Natural (s)
+              Expressão (s)
             </button>
             <button
               onClick={() => handleModeChange('coefficients')}
-              className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+              className={`px-2 sm:px-2.5 py-1 rounded-md font-medium transition-all ${
                 system.inputMode === 'coefficients'
                   ? 'bg-cyan-600 text-white shadow-sm font-semibold'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
