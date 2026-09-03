@@ -225,10 +225,41 @@ export const Simulation = {
     const lastDen = den[den.length - 1];
     const dcGain = Math.abs(lastDen) > 1e-12 ? lastNum / lastDen : null;
 
+    // Dominant second-order pole metrics (wn and zeta)
+    let naturalFrequency: number | null = null;
+    let dampingRatio: number | null = null;
+
+    if (den.length === 3 && den[0] > 0 && den[2] > 0) {
+      const a = den[0];
+      const b = den[1];
+      const c = den[2];
+      naturalFrequency = Math.sqrt(c / a);
+      dampingRatio = b / (2 * Math.sqrt(a * c));
+    } else {
+      // Find dominant complex pair or slowest pole
+      const complexPoles = poles.filter(p => Math.abs(p.im) > 1e-4);
+      if (complexPoles.length > 0) {
+        // Pick pair closest to imaginary axis (slowest decaying)
+        complexPoles.sort((a, b) => b.re - a.re);
+        const dom = complexPoles[0];
+        const wn = Math.hypot(dom.re, dom.im);
+        naturalFrequency = wn;
+        dampingRatio = wn > 0 ? -dom.re / wn : 0;
+      } else if (poles.length > 0) {
+        // Real dominant pole
+        const sorted = [...poles].sort((a, b) => b.re - a.re);
+        const dom = sorted[0];
+        naturalFrequency = Math.abs(dom.re);
+        dampingRatio = 1.0;
+      }
+    }
+
     if (stability !== 'STABLE' || dcGain === null) {
       return {
         ...this.emptyMetrics(),
-        dcGain
+        dcGain,
+        naturalFrequency: naturalFrequency !== null ? Number(naturalFrequency.toFixed(3)) : null,
+        dampingRatio: dampingRatio !== null ? Number(dampingRatio.toFixed(3)) : null
       };
     }
 
@@ -293,27 +324,6 @@ export const Simulation = {
     }
     if (settlingTime === null && y.length > 0) {
       settlingTime = 0;
-    }
-
-    // Dominant second-order pole metrics (wn and zeta)
-    let naturalFrequency: number | null = null;
-    let dampingRatio: number | null = null;
-
-    // Find dominant complex pair or slowest pole
-    const complexPoles = poles.filter(p => Math.abs(p.im) > 1e-4);
-    if (complexPoles.length > 0) {
-      // Pick pair closest to imaginary axis (slowest decaying)
-      complexPoles.sort((a, b) => b.re - a.re);
-      const dom = complexPoles[0];
-      const wn = Math.hypot(dom.re, dom.im);
-      naturalFrequency = wn;
-      dampingRatio = wn > 0 ? -dom.re / wn : 0;
-    } else if (poles.length > 0) {
-      // Real dominant pole
-      const sorted = [...poles].sort((a, b) => b.re - a.re);
-      const dom = sorted[0];
-      naturalFrequency = Math.abs(dom.re);
-      dampingRatio = 1.0;
     }
 
     return {

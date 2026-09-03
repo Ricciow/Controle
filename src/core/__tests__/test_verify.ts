@@ -23,4 +23,46 @@ const res3 = TransferFunctionParser.parseTransferFunction('(s+1)(s+2)/(s^3+4s^2+
 console.log('Num:', res3.numerator);
 console.log('Den:', res3.denominator);
 
+console.log('\n=== TESTE 4: Damping Ratio Slider & Exact 2nd-Order Calculations ===');
+const sys2 = Analyzer.createDefaultFunction('1', 'G1(s)', '#06b6d4', '25 / (s^2 + 2s + 25)');
+const p2 = Analyzer.getSecondOrderParams(sys2);
+console.log('Params iniciais:', { wn: p2.wn, zeta: p2.zeta, is2nd: p2.isSecondOrder });
+
+const sysZeta0 = Analyzer.updateDampingRatio(sys2, 0);
+console.log('Zeta 0 (Oscilatório) expr:', sysZeta0.rawExpression);
+console.log('Zeta 0 metric zeta:', sysZeta0.analysis?.metrics.dampingRatio);
+
+const sysZeta07 = Analyzer.updateDampingRatio(sys2, 0.707);
+console.log('Zeta 0.707 (Ótimo) expr:', sysZeta07.rawExpression);
+console.log('Zeta 0.707 metric zeta:', sysZeta07.analysis?.metrics.dampingRatio);
+
+const sysZeta1 = Analyzer.updateDampingRatio(sys2, 1.0);
+console.log('Zeta 1.0 (Crítico) expr:', sysZeta1.rawExpression);
+console.log('Zeta 1.0 metric zeta:', sysZeta1.analysis?.metrics.dampingRatio);
+
+const sysZeta15 = Analyzer.updateDampingRatio(sys2, 1.5);
+console.log('Zeta 1.5 (Sobreamortecido) expr:', sysZeta15.rawExpression);
+console.log('Zeta 1.5 metric zeta:', sysZeta15.analysis?.metrics.dampingRatio);
+
+console.log('\n=== TESTE 5: Modo Coeficientes ===');
+const sysCoeff = Analyzer.analyzeTransferFunction({
+  id: '2',
+  name: 'G2(s)',
+  color: '#10b981',
+  visible: true,
+  inputMode: 'coefficients',
+  rawExpression: '',
+  numStr: '25',
+  denStr: '1, 2, 25',
+  numerator: [25],
+  denominator: [1, 2, 25],
+  latex: '',
+  factoredLatex: ''
+});
+const sysCoeffUpdated = Analyzer.updateDampingRatio(sysCoeff, 0.5);
+console.log('sysCoeffUpdated denStr:', sysCoeffUpdated.denStr);
+console.log('sysCoeffUpdated zeta:', sysCoeffUpdated.analysis?.metrics.dampingRatio);
+
 console.log('\n=== Todos os testes do motor numérico passaram com sucesso! ===');
+
+

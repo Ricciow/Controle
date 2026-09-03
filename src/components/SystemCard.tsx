@@ -5,11 +5,13 @@ import {
   Trash2, 
   Copy, 
   AlertCircle, 
-  HelpCircle
+  HelpCircle,
+  Sliders
 } from 'lucide-react';
 import { TransferFunction, InputMode } from '../core/types';
 import { MathView } from './MathView';
 import { ComplexMath } from '../core/complex';
+import { Analyzer } from '../core/analyzer';
 
 interface SystemCardProps {
   system: TransferFunction;
@@ -30,6 +32,46 @@ const PALETTE = [
   '#14b8a6', // Teal
   '#f97316', // Orange
 ];
+
+const PRESET_ZETAS = [
+  { label: '0.0', desc: 'Oscilatório', val: 0 },
+  { label: '0.2', desc: 'Subamortecido', val: 0.2 },
+  { label: '0.5', desc: 'Subamortecido', val: 0.5 },
+  { label: '0.707', desc: 'Ótimo (Mp ≈ 4.3%)', val: 0.707 },
+  { label: '1.0', desc: 'Crítico', val: 1.0 },
+  { label: '1.5', desc: 'Sobreamortecido', val: 1.5 },
+];
+
+const getRegimeInfo = (zeta: number) => {
+  if (zeta < -1e-4) {
+    return {
+      label: 'Instável (Amortecimento negativo)',
+      badgeClass: 'bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/30'
+    };
+  }
+  if (Math.abs(zeta) <= 1e-4) {
+    return {
+      label: 'Não-amortecido (Oscilatório puro)',
+      badgeClass: 'bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-500/30'
+    };
+  }
+  if (zeta < 0.999) {
+    return {
+      label: 'Subamortecido (Oscilações)',
+      badgeClass: 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30'
+    };
+  }
+  if (Math.abs(zeta - 1.0) <= 0.005) {
+    return {
+      label: 'Criticamente amortecido',
+      badgeClass: 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30'
+    };
+  }
+  return {
+    label: 'Sobreamortecido (Suave)',
+    badgeClass: 'bg-purple-50 dark:bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/30'
+  };
+};
 
 export const SystemCard: React.FC<SystemCardProps> = ({
   system,
@@ -66,6 +108,22 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   const handleColorSelect = (color: string) => {
     onUpdate({ ...system, color });
     setShowColorPicker(false);
+  };
+
+  const params = Analyzer.getSecondOrderParams(system);
+  const currentZeta = params.zeta !== null ? Number(params.zeta.toFixed(3)) : 0;
+  const regime = getRegimeInfo(currentZeta);
+  const minSlider = Math.min(0, Math.floor(currentZeta * 10) / 10);
+  const maxSlider = Math.max(2.0, Math.ceil(currentZeta * 10) / 10);
+
+  const handleZetaChange = (val: number) => {
+    const updated = Analyzer.updateDampingRatio(system, val);
+    onUpdate(updated);
+  };
+
+  const handleConvertToSecondOrder = () => {
+    const updated = Analyzer.convertToSecondOrder(system, 0.5, 5);
+    onUpdate(updated);
   };
 
   return (
@@ -267,6 +325,111 @@ export const SystemCard: React.FC<SystemCardProps> = ({
               </button>
             )}
           </div>
+        )}
+
+        {/* Damping Ratio (ζ) Control Section */}
+        {!system.error && (
+          params.isSecondOrder && params.zeta !== null ? (
+            <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 space-y-2.5">
+              {/* Header: Title + Numerical input + wn */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    Fator de Amortecimento (<span className="font-serif italic font-bold">ζ</span>):
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={minSlider}
+                    max={maxSlider}
+                    value={currentZeta}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (!isNaN(val)) handleZetaChange(val);
+                    }}
+                    className="w-16 px-1.5 py-0.5 text-xs font-mono font-bold text-right bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-cyan-300 focus:outline-none focus:border-cyan-500"
+                    title="Ajuste fino ou digite o valor exato de ζ"
+                  />
+                  {params.wn !== null && (
+                    <span className="text-[10px] text-slate-400 font-mono" title="Frequência natural ωn mantida constante">
+                      (ωₙ = {params.wn.toFixed(1)} rad/s)
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Damping Regime Badge */}
+              <div className="flex items-center justify-between">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${regime.badgeClass}`}>
+                  {regime.label}
+                </span>
+              </div>
+
+              {/* Continuous Interactive Range Slider */}
+              <div className="space-y-1">
+                <input
+                  type="range"
+                  min={minSlider}
+                  max={maxSlider}
+                  step="0.01"
+                  value={currentZeta}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    if (!isNaN(val)) handleZetaChange(val);
+                  }}
+                  className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer transition-all"
+                  style={{ accentColor: system.color }}
+                />
+                <div className="flex justify-between text-[10px] font-mono text-slate-400">
+                  <span>{minSlider.toFixed(1)}</span>
+                  <span className="text-slate-500 font-medium">1.0 (crítico)</span>
+                  <span>{maxSlider.toFixed(1)}</span>
+                </div>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
+                <span className="text-[10px] text-slate-400 mr-0.5 font-medium">Atalhos:</span>
+                {PRESET_ZETAS.map((pz) => {
+                  const isActive = Math.abs(currentZeta - pz.val) < 0.015;
+                  return (
+                    <button
+                      key={pz.val}
+                      type="button"
+                      onClick={() => handleZetaChange(pz.val)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-all ${
+                        isActive
+                          ? 'bg-cyan-600 text-white font-bold shadow-xs'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                      title={`${pz.desc} (ζ = ${pz.val})`}
+                    >
+                      {pz.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 text-xs flex items-center justify-between gap-2">
+              <div className="text-slate-500 dark:text-slate-400 text-[11px] leading-snug">
+                <span className="font-semibold text-slate-700 dark:text-slate-300 block">Fator de Amortecimento (ζ):</span>
+                Aplicável a sistemas de 2ª ordem (<code className="font-mono">s² + 2ζωₙs + ωₙ²</code>)
+              </div>
+              <button
+                type="button"
+                onClick={handleConvertToSecondOrder}
+                className="px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-medium whitespace-nowrap transition-colors"
+                title="Transformar em sistema padrão de 2ª ordem para controlar ζ"
+              >
+                Adaptar p/ 2ª ordem
+              </button>
+            </div>
+          )
         )}
 
         {/* Quick Roots & Parameters Info */}

@@ -78,3 +78,13 @@ export interface PresetItem {
   numerator: number[];
   denominator: number[];
 }
+
+export interface SecondOrderParams {
+  isSecondOrder: boolean;
+  wn: number | null;
+  zeta: number | null;
+  a: number | null;
+  b: number | null;
+  c: number | null;
+}
+
