@@ -16,7 +16,8 @@ export const Simulation = {
       }
       if (Math.abs(p.re) <= 1e-6) {
         hasImaginary = true;
-        const key = Math.round(Math.abs(p.im) * 100) / 100;
+        // Conjugate poles +jω and -jω are distinct, not a repeated pole.
+        const key = Math.round(p.im * 100) / 100;
         imagMap.set(key, (imagMap.get(key) || 0) + 1);
       }
     }

@@ -23,13 +23,20 @@ export const Analyzer = {
       num = Polynomial.clean(num);
       den = Polynomial.clean(den);
 
+      // Keep coefficient inputs as the plant G(s), so repeated edits cannot
+      // accidentally close the already-closed loop a second time.
+      const plantNumStr = num.join(', ');
+      const plantDenStr = den.join(', ');
+
       if (den.length === 1 && den[0] === 0) {
-        return {
-          ...tf,
-          numerator: num,
-          denominator: den,
-          error: 'O denominador não pode ser zero.'
-        };
+        throw new Error('O denominador não pode ser zero.');
+      }
+
+      if (tf.unityFeedback) {
+        den = Polynomial.add(den, num);
+        if (den.length === 1 && den[0] === 0) {
+          throw new Error('Realimentação indefinida: D(s) + N(s) é zero.');
+        }
       }
 
       // Roots
@@ -80,8 +87,8 @@ export const Analyzer = {
         ...tf,
         numerator: num,
         denominator: den,
-        numStr: num.join(', '),
-        denStr: den.join(', '),
+        numStr: plantNumStr,
+        denStr: plantDenStr,
         latex,
         factoredLatex,
         error: null,
@@ -91,7 +98,8 @@ export const Analyzer = {
       const message = err instanceof Error ? err.message : 'Erro ao processar função de transferência.';
       return {
         ...tf,
-        error: message
+        error: message,
+        analysis: undefined
       };
     }
   },

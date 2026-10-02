@@ -5,6 +5,7 @@ import { Analyzer } from '../core/analyzer';
 import { ComplexMath } from '../core/complex';
 import { MathView } from './MathView';
 import { KControl } from './KControl';
+import { FeedbackControl } from './FeedbackControl';
 
 interface AddSystemModalProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
   const [numStr, setNumStr] = useState('');
   const [denStr, setDenStr] = useState('');
   const [kValue, setKValue] = useState(1);
+  const [unityFeedback, setUnityFeedback] = useState(false);
 
   // Start with empty inputs by default whenever modal opens
   useEffect(() => {
@@ -52,6 +54,7 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
       setDenStr('');
       setInputMode('expression');
       setKValue(1);
+      setUnityFeedback(false);
     }
   }, [isOpen, suggestedName, suggestedColor]);
 
@@ -79,6 +82,7 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
       inputMode,
       rawExpression,
       kValue,
+      unityFeedback,
       numStr,
       denStr,
       numerator: [],
@@ -95,7 +99,7 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
       analysis: analyzed.analysis,
       system: analyzed
     };
-  }, [name, color, inputMode, rawExpression, numStr, denStr, kValue]);
+  }, [name, color, inputMode, rawExpression, numStr, denStr, kValue, unityFeedback]);
 
   if (!isOpen) return null;
 
@@ -256,6 +260,7 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
           )}
 
           {inputMode === 'expression' && /[kK]/.test(rawExpression) && <KControl value={kValue} onChange={setKValue} />}
+          <FeedbackControl enabled={unityFeedback} onChange={setUnityFeedback} />
 
           {/* Real-time Preview Box */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 p-3 space-y-2 min-h-[90px] flex flex-col justify-center">

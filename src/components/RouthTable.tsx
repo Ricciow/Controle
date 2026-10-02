@@ -1,9 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { Suspense, useMemo, useState } from 'react';
 import { Table } from 'lucide-react';
 import { TransferFunction } from '../core/types';
 import { analyzeRouth } from '../core/routh';
 import { Polynomial } from '../core/polynomial';
 import { MathView } from './MathView';
+
+const SymbolicRouthTable = React.lazy(() => import('./SymbolicRouthTable').then(module => ({ default: module.SymbolicRouthTable })));
 
 const formatValue = (value: number) => {
   if (!Number.isFinite(value)) return '—';
@@ -20,8 +22,10 @@ const labels = {
 };
 
 export const RouthTable: React.FC<{ systems: TransferFunction[] }> = ({ systems }) => {
-  const results = useMemo(() => systems.filter(system => !system.error && system.analysis).map(system => {
+  const [symbolic, setSymbolic] = useState(false);
+  const results = useMemo(() => systems.map(system => {
     try {
+      if (system.error || !system.analysis) return { system, result: null, error: system.error || 'Função inválida.' };
       return { system, result: analyzeRouth(system.denominator), error: null };
     } catch (error) {
       return { system, result: null, error: error instanceof Error ? error.message : 'Erro na análise.' };
@@ -36,8 +40,12 @@ export const RouthTable: React.FC<{ systems: TransferFunction[] }> = ({ systems 
         </h3>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           Cada mudança de sinal na primeira coluna indica um polo no semiplano direito.
-          A análise usa o denominador informado, sem cancelamento de polos e zeros.
+          A análise usa o polinômio característico da malha escolhida, sem cancelamento de polos e zeros.
         </p>
+        <div className="flex flex-wrap gap-2 mt-3 text-xs">
+          <button type="button" aria-pressed={!symbolic} onClick={() => setSymbolic(false)} className={`px-3 py-1.5 rounded-lg ${!symbolic ? 'bg-cyan-600 text-white' : 'bg-slate-200 dark:bg-slate-800'}`}>Numérica (K escolhido)</button>
+          <button type="button" aria-pressed={symbolic} onClick={() => setSymbolic(true)} className={`px-3 py-1.5 rounded-lg ${symbolic ? 'bg-cyan-600 text-white' : 'bg-slate-200 dark:bg-slate-800'}`}>Em função de K</button>
+        </div>
       </div>
       <div className="p-4 space-y-5">
         {results.length === 0 && <p className="text-sm text-slate-500">Adicione uma função válida para montar a tabela.</p>}
@@ -51,9 +59,11 @@ export const RouthTable: React.FC<{ systems: TransferFunction[] }> = ({ systems 
                 result.status === 'STABLE' ? 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
                   : result.status === 'UNSTABLE' ? 'bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-400'
                     : 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400'
-              }`}>{labels[result.status]}</span>}
+              }`}>{labels[result.status]}{symbolic ? ` (K = ${system.kValue ?? 1})` : ''}</span>}
             </div>
-            <div className="overflow-x-auto text-sm"><MathView math={`D(s) = ${Polynomial.toLaTeX(system.denominator)}`} /></div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{system.unityFeedback ? 'Malha fechada · realimentação negativa unitária · P(s) = D(s) + N(s)' : 'Malha aberta · P(s) = D(s)'}</p>
+            {symbolic ? <Suspense fallback={<p className="text-xs text-slate-500">Montando tabela em função de K…</p>}><SymbolicRouthTable system={system} /></Suspense> : <>
+            {result && <div className="overflow-x-auto text-sm"><MathView math={`P(s) = ${Polynomial.toLaTeX(system.denominator)}`} /></div>}
             {system.inputMode === 'expression' && /[kK]/.test(system.rawExpression) && <p className="text-xs font-mono text-cyan-700 dark:text-cyan-300">K = {system.kValue ?? 1}</p>}
             {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
             {result && <>
@@ -83,6 +93,7 @@ export const RouthTable: React.FC<{ systems: TransferFunction[] }> = ({ systems 
                 {result.signChanges === null ? 'Contagem de polos inconclusiva.' : `${result.signChanges} ${result.signChanges === 1 ? 'mudança de sinal / polo' : 'mudanças de sinal / polos'} no semiplano direito.`}
               </p>
               {result.notes.map(note => <p key={note} className="text-xs text-amber-700 dark:text-amber-400">{note}</p>)}
+            </>}
             </>}
           </article>
         ))}

@@ -13,6 +13,7 @@ import { MathView } from './MathView';
 import { ComplexMath } from '../core/complex';
 import { Analyzer } from '../core/analyzer';
 import { KControl } from './KControl';
+import { FeedbackControl } from './FeedbackControl';
 
 interface SystemCardProps {
   system: TransferFunction;
@@ -300,6 +301,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
         )}
 
         {hasK && <KControl value={system.kValue ?? 1} onChange={kValue => onUpdate({ ...system, kValue })} />}
+        <FeedbackControl enabled={system.unityFeedback ?? false} onChange={unityFeedback => onUpdate({ ...system, unityFeedback })} />
 
         {/* Error Display */}
         {system.error && (
@@ -314,7 +316,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
           <div className="bg-slate-50 dark:bg-slate-950/60 rounded-lg p-2.5 border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center relative group">
             <div className="text-center overflow-x-auto max-w-full py-1 text-slate-900 dark:text-slate-100">
               <MathView 
-                math={`${system.name} = ${showFactored && system.factoredLatex ? system.factoredLatex : system.latex}`} 
+                math={`${system.unityFeedback ? 'T(s)' : system.name} = ${showFactored && system.factoredLatex ? system.factoredLatex : system.latex}`}
                 block 
               />
             </div>
@@ -332,7 +334,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
         )}
 
         {/* Damping Ratio (ζ) Control Section */}
-        {!system.error && !hasK && (
+        {!system.error && !hasK && !system.unityFeedback && (
           params.isSecondOrder && params.zeta !== null ? (
             <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 space-y-2.5">
               {/* Header: Title + Numerical input + wn */}

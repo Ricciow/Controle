@@ -1,21 +1,23 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
-const buildDirectory = mkdtempSync(join(tmpdir(), 'control-lab-routh-'));
+const buildDirectory = mkdtempSync(join(process.cwd(), 'node_modules', '.routh-tests-'));
 try {
   const compilation = spawnSync(process.execPath, [require.resolve('typescript/bin/tsc'),
-    'src/core/routh.ts', 'src/core/analyzer.ts', '--outDir', buildDirectory,
+    'src/core/routh.ts', 'src/core/analyzer.ts', 'src/core/symbolicRouth.ts', '--outDir', buildDirectory, '--esModuleInterop',
     '--module', 'commonjs', '--moduleResolution', 'node', '--target', 'ES2020', '--strict', '--skipLibCheck',
   ], { encoding: 'utf8' });
   assert.equal(compilation.status, 0, compilation.stdout + compilation.stderr);
   const { analyzeRouth } = require(join(buildDirectory, 'routh.js'));
   const { Analyzer } = require(join(buildDirectory, 'analyzer.js'));
   const { TransferFunctionParser: parser } = require(join(buildDirectory, 'parser.js'));
+  const { analyzeSymbolicRouth } = require(join(buildDirectory, 'symbolicRouth.js'));
+  const nerdamer = require('nerdamer');
+  require('nerdamer/Algebra');
   const cases = [
     [[1, 2, 25], 0, 'STABLE'],
     [[1, 6, 11, 6], 0, 'STABLE'],
@@ -67,7 +69,59 @@ try {
   assert.ok(Analyzer.analyzeTransferFunction({ ...system, rawExpression: '1 / K', kValue: 0 }).error);
   assert.deepEqual(parser.parseTransferFunction('K').numerator, [1]);
   assert.throws(() => parser.parseTransferFunction('K', Infinity));
-  console.log(`${cases.length * 4} polynomial cases, table values, system integration and adjustable K passed.`);
+
+  const plant = Analyzer.createDefaultFunction('feedback', 'G(s)', '#06b6d4', 'K / (s*(s+1)*(s+2))');
+  const closed = Analyzer.analyzeTransferFunction({ ...plant, unityFeedback: true, kValue: 3 });
+  assert.deepEqual(closed.denominator, [1, 3, 2, 3]);
+  assert.deepEqual(closed.numerator, [3]);
+  assert.equal(closed.denStr, '1, 3, 2, 0');
+  assert.deepEqual(Analyzer.analyzeTransferFunction(closed).denominator, closed.denominator);
+  assert.deepEqual(Analyzer.analyzeTransferFunction({ ...closed, inputMode: 'coefficients' }).denominator, closed.denominator);
+  assert.deepEqual(Analyzer.analyzeTransferFunction({ ...closed, unityFeedback: false }).denominator, [1, 3, 2, 0]);
+  const constant = Analyzer.createDefaultFunction('constant', 'G(s)', '#fff', '2');
+  const constantClosed = Analyzer.analyzeTransferFunction({ ...constant, unityFeedback: true });
+  assert.equal(constantClosed.analysis.metrics.dcGain, 2 / 3);
+  assert.ok(Analyzer.analyzeTransferFunction({ ...constant, rawExpression: '-1', unityFeedback: true }).error);
+
+  const symbolic = analyzeSymbolicRouth(closed);
+  assert.equal(symbolic.rows.length, 4);
+  assert.ok(symbolic.rows[2].values[0].includes('K'));
+  assert.equal(symbolic.conditions.length, 2);
+  assert.equal(symbolic.alwaysNonStable, false);
+  assert.equal(Analyzer.analyzeTransferFunction({ ...closed, kValue: 6 }).analysis.stability, 'MARGINALLY_STABLE');
+  const { Simulation } = require(join(buildDirectory, 'simulation.js'));
+  assert.equal(Simulation.getStability([{ re: 0, im: 1 }, { re: 0, im: -1 }]), 'MARGINALLY_STABLE');
+  assert.equal(Simulation.getStability([{ re: 0, im: 1 }, { re: 0, im: 1 }]), 'UNSTABLE');
+  assert.equal(Analyzer.analyzeTransferFunction({ ...closed, inputMode: 'coefficients', denStr: '0' }).analysis, undefined);
+  const parameterSystems = [
+    closed,
+    { ...plant, rawExpression: 'K/(s^3+2s^2+3s+K)', unityFeedback: false },
+    { ...plant, rawExpression: '(2Ks+K^2)/(s^3+4s^2+5s+2)', unityFeedback: true },
+    { ...plant, rawExpression: '1/(K*s^2+2s+1)', unityFeedback: false },
+    { ...plant, rawExpression: '1/(s^2+Ks+1)', unityFeedback: false },
+    { ...plant, rawExpression: '1/(s^2+2s+1/K)', unityFeedback: false },
+  ];
+  for (const parameterSystem of parameterSystems) {
+    const symbolicResult = analyzeSymbolicRouth(parameterSystem);
+    for (const kValue of [-2, -1, 1, 3, 5, 10]) {
+      const numeric = Analyzer.analyzeTransferFunction({ ...parameterSystem, kValue });
+      assert.equal(numeric.error, null);
+      const numericResult = analyzeRouth(numeric.denominator);
+      assert.equal(symbolicResult.rows.length, numericResult.rows.length);
+      for (let i = 0; i < symbolicResult.rows.length; i++) {
+        for (let j = 0; j < symbolicResult.rows[i].values.length; j++) {
+          const calculated = Number(nerdamer(symbolicResult.rows[i].values[j], { K: String(kValue) }).evaluate().text('decimals'));
+          const expected = numericResult.rows[i].values[j];
+          assert.ok(Math.abs(calculated - expected) < 1e-6 * Math.max(1, Math.abs(expected)), `Symbolic row ${i}, column ${j}, K=${kValue}: ${calculated} != ${expected}`);
+        }
+      }
+    }
+  }
+  assert.equal(analyzeSymbolicRouth({ ...plant, rawExpression: '1/(s^2+1)' }).rows[1].specialCase, 'auxiliary');
+  assert.equal(analyzeSymbolicRouth({ ...plant, rawExpression: '1/(s^2+1)' }).alwaysNonStable, true);
+  assert.equal(analyzeSymbolicRouth({ ...closed, inputMode: 'coefficients' }).rows.length, 4);
+  assert.throws(() => analyzeSymbolicRouth({ ...plant, rawExpression: 'K/(s+invalid)' }));
+  console.log(`${cases.length * 4} polynomial cases, symbolic/numeric comparisons at 36 parameter settings, K and unity feedback passed.`);
 } finally {
   rmSync(buildDirectory, { recursive: true, force: true });
 }

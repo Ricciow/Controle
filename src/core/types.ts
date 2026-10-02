@@ -59,6 +59,7 @@ export interface TransferFunction {
   visible: boolean;
   inputMode: InputMode;
   kValue?: number;
+  unityFeedback?: boolean;
   rawExpression: string; // e.g. "(2s + 5^2)/(1/2s)"
   numStr: string;        // e.g. "2, 25"
   denStr: string;        // e.g. "0.5, 0"
