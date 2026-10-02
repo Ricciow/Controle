@@ -12,6 +12,7 @@ import { TransferFunction, InputMode } from '../core/types';
 import { MathView } from './MathView';
 import { ComplexMath } from '../core/complex';
 import { Analyzer } from '../core/analyzer';
+import { KControl } from './KControl';
 
 interface SystemCardProps {
   system: TransferFunction;
@@ -82,6 +83,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   const [showFactored, setShowFactored] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const hasK = system.inputMode === 'expression' && /[kK]/.test(system.rawExpression);
 
   const handleModeChange = (mode: InputMode) => {
     onUpdate({
@@ -265,7 +267,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
               value={system.rawExpression}
               onChange={(e) => handleExpressionChange(e.target.value)}
               className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-cyan-500 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 dark:text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
-              placeholder="Ex: 25 / (s^2 + 2s + 25)"
+              placeholder="Ex: K / (s^3 + 2s^2 + 3s + K)"
             />
           </div>
         ) : (
@@ -296,6 +298,8 @@ export const SystemCard: React.FC<SystemCardProps> = ({
             </div>
           </div>
         )}
+
+        {hasK && <KControl value={system.kValue ?? 1} onChange={kValue => onUpdate({ ...system, kValue })} />}
 
         {/* Error Display */}
         {system.error && (
@@ -328,7 +332,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
         )}
 
         {/* Damping Ratio (ζ) Control Section */}
-        {!system.error && (
+        {!system.error && !hasK && (
           params.isSecondOrder && params.zeta !== null ? (
             <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 space-y-2.5">
               {/* Header: Title + Numerical input + wn */}

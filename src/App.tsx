@@ -7,6 +7,7 @@ import { StepResponsePlot } from './components/StepResponsePlot';
 import { BodePlot } from './components/BodePlot';
 import { NyquistPlot } from './components/NyquistPlot';
 import { MetricsTable } from './components/MetricsTable';
+import { RouthTable } from './components/RouthTable';
 import { PresetsModal } from './components/PresetsModal';
 import { AddSystemModal } from './components/AddSystemModal';
 import { TransferFunction, PresetItem } from './core/types';
@@ -36,6 +37,7 @@ export const App: React.FC = () => {
     bode: false,
     nyquist: false,
     table: true,
+    routh: true,
   });
 
   // Initialize with ONE standard 2nd-order underdamped system
@@ -168,7 +170,7 @@ export const App: React.FC = () => {
           }`}
         >
           <Table className="w-3.5 h-3.5" />
-          <span>Métricas</span>
+          <span>Tabelas</span>
         </button>
       </div>
 
@@ -257,8 +259,12 @@ export const App: React.FC = () => {
               </div>
             )}
 
+            {(mobileTab === 'table' || mobileTab === 'graphs') && enabledGraphs.routh && (
+              <RouthTable systems={systems} />
+            )}
+
             {/* If no graphs or tables are enabled */}
-            {!hasAnyGraph && !enabledGraphs.table && (
+            {!hasAnyGraph && !enabledGraphs.table && !enabledGraphs.routh && (
               <div className="flex flex-col items-center justify-center py-16 sm:py-24 text-slate-500 dark:text-slate-400 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white/50 dark:bg-slate-900/30 p-4 text-center">
                 <p className="text-sm font-medium mb-3">Nenhum gráfico selecionado no momento.</p>
                 <div className="flex flex-wrap items-center justify-center gap-2">

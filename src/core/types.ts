@@ -58,6 +58,7 @@ export interface TransferFunction {
   color: string;
   visible: boolean;
   inputMode: InputMode;
+  kValue?: number;
   rawExpression: string; // e.g. "(2s + 5^2)/(1/2s)"
   numStr: string;        // e.g. "2, 25"
   denStr: string;        // e.g. "0.5, 0"

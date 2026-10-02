@@ -12,7 +12,7 @@ export const Analyzer = {
       let den: number[] = [];
 
       if (tf.inputMode === 'expression') {
-        const parsed = TransferFunctionParser.parseTransferFunction(tf.rawExpression);
+        const parsed = TransferFunctionParser.parseTransferFunction(tf.rawExpression, tf.kValue ?? 1);
         num = parsed.numerator;
         den = parsed.denominator;
       } else {
@@ -42,7 +42,7 @@ export const Analyzer = {
       const latex = `\\frac{${numLatex}}{${denLatex}}`;
 
       // Factored LaTeX
-      const gain = (num[0] || 1) / (den[0] || 1);
+      const gain = num[0] / den[0];
       const factoredLatex = Polynomial.toFactoredLaTeX(gain, zeros, poles);
 
       // Stability

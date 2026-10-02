@@ -1,6 +1,6 @@
 import { Polynomial } from './polynomial';
 
-type TokenType = 'NUMBER' | 'VAR' | 'PLUS' | 'MINUS' | 'STAR' | 'SLASH' | 'CARET' | 'LPAREN' | 'RPAREN' | 'EOF';
+type TokenType = 'NUMBER' | 'PARAM' | 'VAR' | 'PLUS' | 'MINUS' | 'STAR' | 'SLASH' | 'CARET' | 'LPAREN' | 'RPAREN' | 'EOF';
 
 interface Token {
   type: TokenType;
@@ -11,9 +11,11 @@ interface Token {
 class Lexer {
   private input: string;
   private pos: number = 0;
+  private kValue: number;
 
-  constructor(input: string) {
+  constructor(input: string, kValue: number) {
     this.input = input;
+    this.kValue = kValue;
   }
 
   public tokenize(): Token[] {
@@ -43,6 +45,8 @@ class Lexer {
         tokens.push({ type: 'RPAREN', value: ')', pos: this.pos++ });
       } else if (char === 's' || char === 'S') {
         tokens.push({ type: 'VAR', value: 's', pos: this.pos++ });
+      } else if (char === 'k' || char === 'K') {
+        tokens.push({ type: 'PARAM', value: String(this.kValue), pos: this.pos++ });
       } else if (/[0-9]/.test(char) || (char === '.' && /[0-9]/.test(this.input[this.pos + 1] || ''))) {
         let numStr = '';
         const startPos = this.pos;
@@ -99,6 +103,8 @@ class ExpressionParser {
     // RPAREN NUMBER (e.g. (s+1)2)
     // VAR VAR (e.g. s s)
     if (
+      (['NUMBER', 'VAR', 'PARAM', 'RPAREN'].includes(prev.type) && curr.type === 'PARAM') ||
+      (prev.type === 'PARAM' && ['NUMBER', 'VAR', 'LPAREN'].includes(curr.type)) ||
       (prev.type === 'NUMBER' && (curr.type === 'VAR' || curr.type === 'LPAREN')) ||
       (prev.type === 'VAR' && (curr.type === 'VAR' || curr.type === 'LPAREN')) ||
       (prev.type === 'RPAREN' && (curr.type === 'LPAREN' || curr.type === 'VAR' || curr.type === 'NUMBER'))
@@ -181,6 +187,7 @@ class ExpressionParser {
   }
 
   private base(): number[] {
+    if (this.match('PARAM')) return [Number(this.previous().value)];
     if (this.match('PLUS')) {
       return this.base();
     }
@@ -246,16 +253,18 @@ export const TransferFunctionParser = {
     return Polynomial.clean(nums);
   },
 
-  parsePolynomialExpression(expr: string): number[] {
+  parsePolynomialExpression(expr: string, kValue: number = 1): number[] {
+    if (!Number.isFinite(kValue)) throw new Error('K deve ser um número real e finito.');
     const trimmed = expr.trim();
     if (!trimmed) return [0];
-    const lexer = new Lexer(trimmed);
+    const lexer = new Lexer(trimmed, kValue);
     const tokens = lexer.tokenize();
     const parser = new ExpressionParser(tokens);
     return parser.parse();
   },
 
-  parseTransferFunction(input: string): { numerator: number[]; denominator: number[]; isExpression: boolean } {
+  parseTransferFunction(input: string, kValue: number = 1): { numerator: number[]; denominator: number[]; isExpression: boolean } {
+    if (!Number.isFinite(kValue)) throw new Error('K deve ser um número real e finito.');
     const cleanInput = input.trim();
     if (!cleanInput) {
       return { numerator: [1], denominator: [1, 1], isExpression: true };
@@ -323,8 +332,8 @@ export const TransferFunctionParser = {
         if (balanced) denStr = denStr.slice(1, -1).trim();
       }
 
-      const num = TransferFunctionParser.parsePolynomialExpression(numStr);
-      const den = TransferFunctionParser.parsePolynomialExpression(denStr);
+      const num = TransferFunctionParser.parsePolynomialExpression(numStr, kValue);
+      const den = TransferFunctionParser.parsePolynomialExpression(denStr, kValue);
 
       if (Polynomial.clean(den).length === 1 && Polynomial.clean(den)[0] === 0) {
         throw new Error('O denominador da função de transferência não pode ser nulo (zero).');
@@ -350,7 +359,7 @@ export const TransferFunctionParser = {
       if (balanced) numStr = numStr.slice(1, -1).trim();
     }
 
-    const num = TransferFunctionParser.parsePolynomialExpression(numStr);
+    const num = TransferFunctionParser.parsePolynomialExpression(numStr, kValue);
     return {
       numerator: num,
       denominator: [1],

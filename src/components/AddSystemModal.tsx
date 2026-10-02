@@ -4,6 +4,7 @@ import { TransferFunction, InputMode } from '../core/types';
 import { Analyzer } from '../core/analyzer';
 import { ComplexMath } from '../core/complex';
 import { MathView } from './MathView';
+import { KControl } from './KControl';
 
 interface AddSystemModalProps {
   isOpen: boolean;
@@ -39,6 +40,7 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
   const [rawExpression, setRawExpression] = useState('');
   const [numStr, setNumStr] = useState('');
   const [denStr, setDenStr] = useState('');
+  const [kValue, setKValue] = useState(1);
 
   // Start with empty inputs by default whenever modal opens
   useEffect(() => {
@@ -49,6 +51,7 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
       setNumStr('');
       setDenStr('');
       setInputMode('expression');
+      setKValue(1);
     }
   }, [isOpen, suggestedName, suggestedColor]);
 
@@ -75,6 +78,7 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
       visible: true,
       inputMode,
       rawExpression,
+      kValue,
       numStr,
       denStr,
       numerator: [],
@@ -91,7 +95,7 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
       analysis: analyzed.analysis,
       system: analyzed
     };
-  }, [name, color, inputMode, rawExpression, numStr, denStr]);
+  }, [name, color, inputMode, rawExpression, numStr, denStr, kValue]);
 
   if (!isOpen) return null;
 
@@ -216,7 +220,7 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
                 value={rawExpression}
                 onChange={(e) => setRawExpression(e.target.value)}
                 className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-cyan-500 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 dark:text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
-                placeholder="Ex: 10 / (s^2 + 3s + 10) ou (2s + 5^2)/(1/2s)"
+                placeholder="Ex: K / (s^3 + 2s^2 + 3s + K)"
               />
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                 Suporta potências (<code className="font-mono font-bold">5^2</code>), frações (<code className="font-mono font-bold">1/2s</code>), produtos e parênteses.
@@ -250,6 +254,8 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
               </div>
             </div>
           )}
+
+          {inputMode === 'expression' && /[kK]/.test(rawExpression) && <KControl value={kValue} onChange={setKValue} />}
 
           {/* Real-time Preview Box */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 p-3 space-y-2 min-h-[90px] flex flex-col justify-center">

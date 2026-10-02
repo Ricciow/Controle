@@ -16,6 +16,7 @@ export interface EnabledGraphs {
   bode: boolean;
   nyquist: boolean;
   table: boolean;
+  routh: boolean;
 }
 
 interface NavbarProps {
@@ -37,6 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { key: 'bode' as const, label: 'Bode', icon: BarChart2 },
     { key: 'nyquist' as const, label: 'Nyquist', icon: Compass },
     { key: 'table' as const, label: 'Métricas', icon: Table },
+    { key: 'routh' as const, label: 'Routh-Hurwitz', icon: Table },
   ];
 
   return (
@@ -76,6 +78,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             return (
               <button
                 key={key}
+                aria-pressed={isEnabled}
                 onClick={() => onToggleGraph(key)}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all select-none flex-shrink-0 ${
                   isEnabled

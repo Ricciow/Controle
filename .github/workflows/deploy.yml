@@ -36,6 +36,9 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Test Routh-Hurwitz analysis
+        run: npm test
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
