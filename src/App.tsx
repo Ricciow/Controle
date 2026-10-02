@@ -221,10 +221,10 @@ export const App: React.FC = () => {
 
             {/* Graphs Grid (Shown when on graphs tab or on desktop) */}
             {(mobileTab === 'graphs' || window.innerWidth >= 1024) && hasAnyGraph && (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-5">
+              <div className={`grid grid-cols-1 ${activeGraphCount > 1 ? 'xl:grid-cols-2' : ''} gap-4 sm:gap-5`}>
                 {/* 1. Resposta Temporal */}
                 {enabledGraphs.step && (
-                  <div className="h-[340px] sm:h-[390px] xl:h-[440px]">
+                  <div className="h-[420px] sm:h-[480px] xl:h-[520px]">
                     <StepResponsePlot systems={systems} />
                   </div>
                 )}

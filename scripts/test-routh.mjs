@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 const buildDirectory = mkdtempSync(join(process.cwd(), 'node_modules', '.routh-tests-'));
 try {
   const compilation = spawnSync(process.execPath, [require.resolve('typescript/bin/tsc'),
-    'src/core/routh.ts', 'src/core/analyzer.ts', 'src/core/symbolicRouth.ts', '--outDir', buildDirectory, '--esModuleInterop',
+    'src/core/routh.ts', 'src/core/analyzer.ts', 'src/core/symbolicRouth.ts', 'src/core/timePlot.ts', '--outDir', buildDirectory, '--esModuleInterop',
     '--module', 'commonjs', '--moduleResolution', 'node', '--target', 'ES2020', '--strict', '--skipLibCheck',
   ], { encoding: 'utf8' });
   assert.equal(compilation.status, 0, compilation.stdout + compilation.stderr);
@@ -121,6 +121,32 @@ try {
   assert.equal(analyzeSymbolicRouth({ ...plant, rawExpression: '1/(s^2+1)' }).alwaysNonStable, true);
   assert.equal(analyzeSymbolicRouth({ ...closed, inputMode: 'coefficients' }).rows.length, 4);
   assert.throws(() => analyzeSymbolicRouth({ ...plant, rawExpression: 'K/(s+invalid)' }));
+  const { responseAt, axisTicks, plotBounds, responseDetails } = require(join(buildDirectory, 'timePlot.js'));
+  const sampled = { t: [0, 1, 2, 3, 4], y: [0, 1.2, 0.95, 1.01, 1] };
+  assert.equal(responseAt(sampled, 0.5), 0.6);
+  assert.equal(responseAt(sampled, 4), 1);
+  assert.equal(responseAt(sampled, 4.1), null);
+  assert.equal(responseAt(sampled, -1), null);
+  assert.equal(responseAt({ t: [0, 1], y: [0, NaN] }, 0.5), null);
+  assert.equal(responseAt({ t: [], y: [] }, 0), null);
+  assert.deepEqual(axisTicks(0, 6, 6), [0, 1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(axisTicks(-1, 1, 4), [-1, -0.5, 0, 0.5, 1]);
+  assert.ok(axisTicks(0, 1e-8, 5).every(Number.isFinite));
+  const bounds = plotBounds([sampled], 0, 4);
+  assert.ok(bounds[0] === 0 && bounds[1] > 1.2);
+  const zeroBounds = plotBounds([{ t: [0, 1], y: [0, 0] }], 0, 1);
+  assert.ok(zeroBounds[0] < zeroBounds[1]);
+  const detail = responseDetails(sampled, 1);
+  assert.equal(detail.peakTime, 1);
+  assert.ok(Math.abs(detail.overshoot - 20) < 1e-8);
+  assert.equal(detail.settlingTime, 3);
+  const negativeDetail = responseDetails({ t: sampled.t, y: sampled.y.map(value => -value) }, -1);
+  assert.equal(negativeDetail.peakTime, 1);
+  assert.ok(Math.abs(negativeDetail.overshoot - 20) < 1e-8);
+  assert.equal(responseDetails({ t: [0, 1], y: [0, 0.5] }, 1).settlingTime, null);
+  assert.equal(responseDetails({ t: [0, 1], y: [2, 2] }, 2).peakTime, null);
+  assert.equal(responseDetails({ t: [0, 1], y: [0, 0] }, 0).overshoot, null);
+  console.log('Time-plot interpolation, axes, zero/negative responses and settling indicators passed.');
   console.log(`${cases.length * 4} polynomial cases, symbolic/numeric comparisons at 36 parameter settings, K and unity feedback passed.`);
 } finally {
   rmSync(buildDirectory, { recursive: true, force: true });

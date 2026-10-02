@@ -1,5 +1,6 @@
 import { Complex, SimulationResult, SystemMetrics, StabilityStatus } from './types';
 import { Polynomial } from './polynomial';
+import { responseDetails } from './timePlot';
 
 export const Simulation = {
   getStability(poles: Complex[]): StabilityStatus {
@@ -264,34 +265,12 @@ export const Simulation = {
       };
     }
 
-    const yss = y[y.length - 1]; // or dcGain
+    const yss = dcGain;
     const y0 = y[0];
     const totalChange = yss - y0;
 
     let riseTime: number | null = null;
-    let peakTime: number | null = null;
-    let settlingTime: number | null = null;
-    let overshootPercent: number | null = null;
-
-    // Peak and Overshoot
-    let yPeak = y0;
-    let peakIdx = 0;
-    for (let i = 0; i < y.length; i++) {
-      if (Math.abs(y[i] - y0) > Math.abs(yPeak - y0)) {
-        yPeak = y[i];
-        peakIdx = i;
-      }
-    }
-
-    peakTime = t[peakIdx];
-    if (Math.abs(yss) > 1e-6) {
-      const diff = (yPeak - yss) / Math.abs(yss);
-      if (diff > 0.001) {
-        overshootPercent = diff * 100;
-      } else {
-        overshootPercent = 0;
-      }
-    }
+    const { peakTime, settlingTime, overshoot: overshootPercent } = responseDetails({ t, y }, yss);
 
     // Rise time (10% to 90% of steady state)
     if (Math.abs(totalChange) > 1e-6) {
@@ -313,18 +292,6 @@ export const Simulation = {
       if (t10 !== null && t90 !== null) {
         riseTime = t90 - t10;
       }
-    }
-
-    // Settling time (2% band)
-    const band = 0.02 * Math.abs(yss);
-    for (let i = y.length - 1; i >= 0; i--) {
-      if (Math.abs(y[i] - yss) > band) {
-        settlingTime = i < y.length - 1 ? t[i + 1] : t[i];
-        break;
-      }
-    }
-    if (settlingTime === null && y.length > 0) {
-      settlingTime = 0;
     }
 
     return {
