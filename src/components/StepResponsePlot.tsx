@@ -1,7 +1,10 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Activity, ChevronLeft, ChevronRight, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { TransferFunction } from '../core/types';
+import { Simulation } from '../core/simulation';
 import { axisTicks, plotBounds, responseAt, responseDetails } from '../core/timePlot';
+
+const MAX_TIME_SCALE = 32;
 
 const format = (value: number | null, digits = 3) => {
   if (value === null || !Number.isFinite(value)) return '—';
@@ -32,14 +35,22 @@ export const StepResponsePlot: React.FC<{ systems: TransferFunction[] }> = ({ sy
 
   const active = useMemo(() => systems.filter(system => system.visible && !system.error && system.analysis?.isProper), [systems]);
   const selected = active.find(system => system.id === selectedId) ?? active[0];
-  const curves = useMemo(() => active.map(system => ({ system, simulation: responseType === 'step' ? system.analysis!.stepResponse : system.analysis!.impulseResponse })), [active, responseType]);
-  const maxTime = Math.max(1e-6, ...curves.map(({ simulation }) => simulation.t[simulation.t.length - 1] ?? 1));
+  const maxTime = Math.max(1e-6, ...active.map(system => system.analysis!.stepResponse.t.at(-1) ?? 1));
   const start = window[0] * maxTime;
   const end = window[1] * maxTime;
+  const responses = useMemo(() => active.map(system => {
+    const analysis = system.analysis!;
+    const result = end > (analysis.stepResponse.t.at(-1) ?? 0)
+      ? Simulation.simulateTimeDomain(system.numerator, system.denominator, analysis.poles, end)
+      : analysis;
+    return { system, result };
+  }), [active, end]);
+  const curves = useMemo(() => responses.map(({ system, result }) => ({ system, simulation: responseType === 'step' ? result.stepResponse : result.impulseResponse })), [responses, responseType]);
   const isStable = selected?.analysis?.stability === 'STABLE';
   const finalValue = isStable && selected && selected.denominator[selected.denominator.length - 1] !== 0
     ? selected.numerator[selected.numerator.length - 1] / selected.denominator[selected.denominator.length - 1] : null;
-  const details = useMemo(() => finalValue !== null && selected ? responseDetails(selected.analysis!.stepResponse, finalValue) : null, [selected, finalValue]);
+  const selectedStep = responses.find(({ system }) => system.id === selected?.id)?.result.stepResponse;
+  const details = useMemo(() => finalValue !== null && selectedStep ? responseDetails(selectedStep, finalValue) : null, [selectedStep, finalValue]);
   const showGuides = guides && responseType === 'step' && finalValue !== null && Number.isFinite(finalValue);
   const band = Math.abs(finalValue ?? 0) * 0.02;
   const references = responseType === 'step' ? [1, ...(showGuides ? [finalValue! - band, finalValue! + band] : [])] : [];
@@ -55,15 +66,15 @@ export const StepResponsePlot: React.FC<{ systems: TransferFunction[] }> = ({ sy
   const time = cursor === null ? null : start + cursor * (end - start);
 
   const zoom = (factor: number) => {
-    const span = Math.min(1, Math.max(1 / 64, (window[1] - window[0]) * factor));
+    const span = Math.min(MAX_TIME_SCALE, Math.max(1 / 64, (window[1] - window[0]) * factor));
     const center = time !== null ? time / maxTime : (window[0] + window[1]) / 2;
-    const left = Math.max(0, Math.min(1 - span, center - span / 2));
+    const left = Math.max(0, Math.min(MAX_TIME_SCALE - span, center - span / 2));
     setWindow([left, left + span]);
     setCursor(null);
   };
   const pan = (direction: number) => {
     const span = window[1] - window[0];
-    const left = Math.max(0, Math.min(1 - span, window[0] + direction * span * 0.5));
+    const left = Math.max(0, Math.min(MAX_TIME_SCALE - span, window[0] + direction * span * 0.5));
     setWindow([left, left + span]);
     setCursor(null);
   };
@@ -106,10 +117,10 @@ export const StepResponsePlot: React.FC<{ systems: TransferFunction[] }> = ({ sy
       </div>
       <div className="flex flex-wrap items-center justify-between gap-1 px-3 py-1.5 bg-slate-50 dark:bg-slate-950/50 border-b border-slate-200 dark:border-slate-800 flex-shrink-0">
         <div className="flex items-center gap-1 text-xs">
-          <button type="button" title="Ampliar intervalo de tempo" aria-label="Ampliar intervalo de tempo" className={controlClass} onClick={() => zoom(0.5)} disabled={window[1] - window[0] <= 1 / 64}><ZoomIn className="w-4 h-4" /></button>
-          <button type="button" title="Reduzir zoom" aria-label="Reduzir zoom" className={controlClass} onClick={() => zoom(2)} disabled={window[1] - window[0] >= 1}><ZoomOut className="w-4 h-4" /></button>
+          <button type="button" title="Aumentar zoom" aria-label="Aumentar zoom" className={controlClass} onClick={() => zoom(0.5)} disabled={window[1] - window[0] <= 1 / 64}><ZoomIn className="w-4 h-4" /></button>
+          <button type="button" title="Reduzir zoom" aria-label="Reduzir zoom" className={controlClass} onClick={() => zoom(2)} disabled={window[1] - window[0] >= MAX_TIME_SCALE}><ZoomOut className="w-4 h-4" /></button>
           <button type="button" title="Ver trecho anterior" aria-label="Ver trecho anterior" className={controlClass} onClick={() => pan(-1)} disabled={window[0] <= 0}><ChevronLeft className="w-4 h-4" /></button>
-          <button type="button" title="Ver trecho seguinte" aria-label="Ver trecho seguinte" className={controlClass} onClick={() => pan(1)} disabled={window[1] >= 1}><ChevronRight className="w-4 h-4" /></button>
+          <button type="button" title="Ver trecho seguinte" aria-label="Ver trecho seguinte" className={controlClass} onClick={() => pan(1)} disabled={window[1] >= MAX_TIME_SCALE}><ChevronRight className="w-4 h-4" /></button>
           <button type="button" title="Restaurar escala" aria-label="Restaurar escala" className={controlClass} onClick={reset}><RotateCcw className="w-3.5 h-3.5" /></button>
           <span className="ml-1 font-mono text-[10px] text-slate-500 dark:text-slate-400">{format(start)}–{format(end)} s</span>
         </div>

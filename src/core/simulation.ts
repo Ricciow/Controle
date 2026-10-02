@@ -37,7 +37,8 @@ export const Simulation = {
   simulateTimeDomain(
     numerator: number[],
     denominator: number[],
-    poles: Complex[]
+    poles: Complex[],
+    endTime?: number
   ): {
     stepResponse: SimulationResult;
     impulseResponse: SimulationResult;
@@ -63,7 +64,8 @@ export const Simulation = {
     if (n === 0) {
       // Pure gain system: H(s) = K
       const gain = num[0] / den[0];
-      const t = Array.from({ length: 100 }, (_, i) => i * 0.05);
+      const duration = Number.isFinite(endTime) ? Math.max(4.95, endTime!) : 4.95;
+      const t = Array.from({ length: 100 }, (_, i) => i * duration / 99);
       return {
         stepResponse: { t, y: t.map(() => gain) },
         impulseResponse: { t, y: t.map((val) => (val === 0 ? gain * 100 : 0)) },
@@ -108,6 +110,9 @@ export const Simulation = {
       tFinal = Math.max(1, Math.min(10, 4 / maxRhp));
     }
 
+    const baseDuration = tFinal;
+    if (Number.isFinite(endTime)) tFinal = Math.max(tFinal, endTime!);
+
     // Normalize denominator to monic
     const aLead = den[0];
     const aMonic = den.map(c => c / aLead);
@@ -125,8 +130,11 @@ export const Simulation = {
     }
 
     // RK4 Simulation
-    const numPoints = 400;
-    const dt = tFinal / (numPoints - 1);
+    const numPoints = Math.min(6400, Math.max(400, Math.ceil(tFinal / baseDuration * 399) + 1));
+    const sampleDt = tFinal / (numPoints - 1);
+    // Preserve integration accuracy when extending the visible time horizon.
+    const substeps = Math.max(1, Math.ceil(sampleDt / Math.min(baseDuration / 399, 0.05 / maxFreq)));
+    const dt = sampleDt / substeps;
     const tArr: number[] = [];
     const yStepArr: number[] = [];
     const yImpulseArr: number[] = [];
@@ -165,7 +173,7 @@ export const Simulation = {
     };
 
     for (let step = 0; step < numPoints; step++) {
-      const curT = step * dt;
+      const curT = step * sampleDt;
       tArr.push(curT);
 
       // Output values
@@ -177,30 +185,32 @@ export const Simulation = {
       yImpulseArr.push(Math.abs(yI) > 1e7 ? Math.sign(yI) * 1e7 : yI);
 
       if (step < numPoints - 1) {
-        // RK4 for Step
-        const k1_s = fDeriv(xStep, 1);
-        const xStep_k2 = xStep.map((xi, i) => xi + 0.5 * dt * k1_s[i]);
-        const k2_s = fDeriv(xStep_k2, 1);
-        const xStep_k3 = xStep.map((xi, i) => xi + 0.5 * dt * k2_s[i]);
-        const k3_s = fDeriv(xStep_k3, 1);
-        const xStep_k4 = xStep.map((xi, i) => xi + dt * k3_s[i]);
-        const k4_s = fDeriv(xStep_k4, 1);
+        for (let substep = 0; substep < substeps; substep++) {
+          // RK4 for Step
+          const k1_s = fDeriv(xStep, 1);
+          const xStep_k2 = xStep.map((xi, i) => xi + 0.5 * dt * k1_s[i]);
+          const k2_s = fDeriv(xStep_k2, 1);
+          const xStep_k3 = xStep.map((xi, i) => xi + 0.5 * dt * k2_s[i]);
+          const k3_s = fDeriv(xStep_k3, 1);
+          const xStep_k4 = xStep.map((xi, i) => xi + dt * k3_s[i]);
+          const k4_s = fDeriv(xStep_k4, 1);
 
-        for (let i = 0; i < n; i++) {
-          xStep[i] += (dt / 6) * (k1_s[i] + 2 * k2_s[i] + 2 * k3_s[i] + k4_s[i]);
-        }
+          for (let i = 0; i < n; i++) {
+            xStep[i] += (dt / 6) * (k1_s[i] + 2 * k2_s[i] + 2 * k3_s[i] + k4_s[i]);
+          }
 
-        // RK4 for Impulse (u=0 for t > 0)
-        const k1_i = fDeriv(xImp, 0);
-        const xImp_k2 = xImp.map((xi, i) => xi + 0.5 * dt * k1_i[i]);
-        const k2_i = fDeriv(xImp_k2, 0);
-        const xImp_k3 = xImp.map((xi, i) => xi + 0.5 * dt * k2_i[i]);
-        const k3_i = fDeriv(xImp_k3, 0);
-        const xImp_k4 = xImp.map((xi, i) => xi + dt * k3_i[i]);
-        const k4_i = fDeriv(xImp_k4, 0);
+          // RK4 for Impulse (u=0 for t > 0)
+          const k1_i = fDeriv(xImp, 0);
+          const xImp_k2 = xImp.map((xi, i) => xi + 0.5 * dt * k1_i[i]);
+          const k2_i = fDeriv(xImp_k2, 0);
+          const xImp_k3 = xImp.map((xi, i) => xi + 0.5 * dt * k2_i[i]);
+          const k3_i = fDeriv(xImp_k3, 0);
+          const xImp_k4 = xImp.map((xi, i) => xi + dt * k3_i[i]);
+          const k4_i = fDeriv(xImp_k4, 0);
 
-        for (let i = 0; i < n; i++) {
-          xImp[i] += (dt / 6) * (k1_i[i] + 2 * k2_i[i] + 2 * k3_i[i] + k4_i[i]);
+          for (let i = 0; i < n; i++) {
+            xImp[i] += (dt / 6) * (k1_i[i] + 2 * k2_i[i] + 2 * k3_i[i] + k4_i[i]);
+          }
         }
       }
     }
