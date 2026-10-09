@@ -3,6 +3,7 @@ import { Activity, Layers, Table, Plus, Sparkles } from 'lucide-react';
 import { Navbar, EnabledGraphs } from './components/Navbar';
 import { SystemList } from './components/SystemList';
 import { PoleZeroPlot } from './components/PoleZeroPlot';
+import { RootLocusPlot } from './components/RootLocusPlot';
 import { StepResponsePlot } from './components/StepResponsePlot';
 import { BodePlot } from './components/BodePlot';
 import { NyquistPlot } from './components/NyquistPlot';
@@ -34,6 +35,7 @@ export const App: React.FC = () => {
   const [enabledGraphs, setEnabledGraphs] = useState<EnabledGraphs>({
     step: true,
     roots: true,
+    locus: false,
     bode: false,
     nyquist: false,
     table: true,
@@ -112,8 +114,8 @@ export const App: React.FC = () => {
   const suggestedName = `G${nextIndex}(s)`;
   const suggestedColor = INITIAL_COLORS[(nextIndex - 1) % INITIAL_COLORS.length];
 
-  const hasAnyGraph = enabledGraphs.step || enabledGraphs.roots || enabledGraphs.bode || enabledGraphs.nyquist;
-  const activeGraphCount = (enabledGraphs.step ? 1 : 0) + (enabledGraphs.roots ? 1 : 0) + (enabledGraphs.bode ? 1 : 0) + (enabledGraphs.nyquist ? 1 : 0);
+  const hasAnyGraph = enabledGraphs.step || enabledGraphs.roots || enabledGraphs.locus || enabledGraphs.bode || enabledGraphs.nyquist;
+  const activeGraphCount = (enabledGraphs.step ? 1 : 0) + (enabledGraphs.roots ? 1 : 0) + (enabledGraphs.locus ? 1 : 0) + (enabledGraphs.bode ? 1 : 0) + (enabledGraphs.nyquist ? 1 : 0);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden transition-colors">
@@ -233,6 +235,12 @@ export const App: React.FC = () => {
                 {enabledGraphs.roots && (
                   <div className="h-[340px] sm:h-[390px] xl:h-[440px]">
                     <PoleZeroPlot systems={systems} />
+                  </div>
+                )}
+
+                {enabledGraphs.locus && (
+                  <div className="h-[520px] sm:h-[560px] xl:h-[600px]">
+                    <RootLocusPlot systems={systems} />
                   </div>
                 )}
 

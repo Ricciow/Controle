@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 const buildDirectory = mkdtempSync(join(process.cwd(), 'node_modules', '.routh-tests-'));
 try {
   const compilation = spawnSync(process.execPath, [require.resolve('typescript/bin/tsc'),
-    'src/core/routh.ts', 'src/core/analyzer.ts', 'src/core/symbolicRouth.ts', 'src/core/timePlot.ts', '--outDir', buildDirectory, '--esModuleInterop',
+    'src/core/routh.ts', 'src/core/analyzer.ts', 'src/core/symbolicRouth.ts', 'src/core/timePlot.ts', 'src/core/rootLocus.ts', '--outDir', buildDirectory, '--esModuleInterop',
     '--module', 'commonjs', '--moduleResolution', 'node', '--target', 'ES2020', '--strict', '--skipLibCheck',
   ], { encoding: 'utf8' });
   assert.equal(compilation.status, 0, compilation.stdout + compilation.stderr);
@@ -16,6 +16,48 @@ try {
   const { Analyzer } = require(join(buildDirectory, 'analyzer.js'));
   const { TransferFunctionParser: parser } = require(join(buildDirectory, 'parser.js'));
   const { analyzeSymbolicRouth } = require(join(buildDirectory, 'symbolicRouth.js'));
+  const { calculateRootLocus, rootLocusCharacteristic, rootLocusPoles } = require(join(buildDirectory, 'rootLocus.js'));
+  const locusSystem = { inputMode: 'expression', rawExpression: '1/(s*(s+2))' };
+  assert.deepEqual(rootLocusCharacteristic(locusSystem, 4), [1, 2, 4]);
+  const quadraticLocus = calculateRootLocus(locusSystem, 4, 4);
+  assert.equal(quadraticLocus.branches.length, 2);
+  assert.ok(quadraticLocus.branches.every(branch => branch.length === 401));
+  assert.deepEqual(quadraticLocus.poles.map(root => root.re || 0), [-2, 0]);
+  assert.ok(quadraticLocus.selectedPoles.every(root => Math.abs(root.re + 1) < 1e-9 && Math.abs(Math.abs(root.im) - Math.sqrt(3)) < 1e-9));
+  assert.deepEqual(rootLocusPoles(locusSystem, 1), [{ re: -1, im: 0 }, { re: -1, im: 0 }]);
+  const explicitGain = { ...locusSystem, rawExpression: 'K/(s*(s+2))', kValue: 0, unityFeedback: true };
+  assert.deepEqual(calculateRootLocus(explicitGain, 4, 4), quadraticLocus);
+  const coefficientPlant = { ...locusSystem, inputMode: 'coefficients', numStr: '1', denStr: '1, 2, 0',
+    unityFeedback: true, denominator: [1, 2, 1] };
+  assert.deepEqual(calculateRootLocus(coefficientPlant, 4, 4), quadraticLocus);
+  assert.deepEqual(rootLocusCharacteristic({ ...locusSystem, rawExpression: 'K/(s^2+Ks+1)' }, 2), [1, 2, 3]);
+  assert.deepEqual(rootLocusCharacteristic({ ...locusSystem, rawExpression: '2k/(s+1)' }, 3), [1, 7]);
+  assert.deepEqual(calculateRootLocus({ ...locusSystem, rawExpression: '(s+3)/(s*(s+2))' }, 100, 1).zeros, [{ re: -3, im: 0 }]);
+  assert.deepEqual(rootLocusPoles({ ...locusSystem, rawExpression: '2' }, 10), []);
+  // Cubic locus crosses the imaginary axis at K=6 and remains accurate at high gains.
+  const cubicPlant = { ...locusSystem, rawExpression: '1/(s*(s+1)*(s+2))' };
+  const crossing = rootLocusPoles(cubicPlant, 6);
+  assert.ok(crossing.some(root => Math.abs(root.re + 3) < 1e-7 && Math.abs(root.im) < 1e-7));
+  assert.equal(crossing.filter(root => Math.abs(root.re) < 1e-7 && Math.abs(Math.abs(root.im) - Math.sqrt(2)) < 1e-7).length, 2);
+  const { ComplexMath: locusMath } = require(join(buildDirectory, 'complex.js'));
+  for (const gain of [0, 1, 6, 100, 1e6]) {
+    const characteristic = rootLocusCharacteristic(cubicPlant, gain);
+    for (const root of rootLocusPoles(cubicPlant, gain)) {
+      const residual = locusMath.mag(locusMath.evalPoly(characteristic, root));
+      assert.ok(residual < 1e-6 * Math.max(1, gain), `Root-locus residual at K=${gain}: ${residual}`);
+    }
+  }
+  const degreeChange = calculateRootLocus({ ...locusSystem, rawExpression: 'K/((1-K)*s+1)' }, 2, 1);
+  assert.deepEqual(degreeChange.selectedPoles, []);
+  assert.equal(degreeChange.branches.length, 2);
+  assert.ok(calculateRootLocus({ ...locusSystem, rawExpression: '1/(K*(s+1))' }, 2).branches.length > 0);
+  assert.ok(degreeChange.branches.flat().every(root => Number.isFinite(root.re) && Number.isFinite(root.im)));
+  for (const gain of [-1, NaN, Infinity]) assert.throws(() => rootLocusPoles(locusSystem, gain));
+  for (const max of [0, -1, NaN, Infinity, 1e6 + 1]) assert.throws(() => calculateRootLocus(locusSystem, max, 0));
+  assert.throws(() => calculateRootLocus(locusSystem, 1, 2));
+  assert.throws(() => calculateRootLocus({ ...locusSystem, rawExpression: '-K' }, 2, 1));
+  assert.throws(() => rootLocusPoles({ ...coefficientPlant, denStr: '0' }, 1));
+  console.log('Root locus: analytic poles, branch continuity, explicit K, plant feedback, cubic crossing and high gains passed.');
   const nerdamer = require('nerdamer');
   require('nerdamer/Algebra');
   const cases = [

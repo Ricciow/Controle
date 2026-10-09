@@ -2,9 +2,12 @@ import React, { useState, useRef, useMemo } from 'react';
 import { ZoomIn, ZoomOut, RotateCcw, Target, Info } from 'lucide-react';
 import { TransferFunction, Complex } from '../core/types';
 import { ComplexMath } from '../core/complex';
+import { RootLocusData } from '../core/rootLocus';
 
 interface PoleZeroPlotProps {
   systems: TransferFunction[];
+  locus?: { id: string; name: string; color: string; data: RootLocusData; gain: number }[];
+  controls?: React.ReactNode;
 }
 
 interface HoveredRoot {
@@ -16,7 +19,7 @@ interface HoveredRoot {
   screenY: number;
 }
 
-export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
+export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, controls }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [zoom, setZoom] = useState(1.0);
@@ -44,8 +47,13 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
         if (absIm > maxAbs) maxAbs = absIm;
       });
     });
+    locus?.forEach(({ data }) => {
+      [...data.branches.flat(), ...data.selectedPoles].forEach(root => {
+        maxAbs = Math.max(maxAbs, Math.abs(root.re), Math.abs(root.im));
+      });
+    });
     return Math.max(4, Math.ceil(maxAbs * 1.3));
-  }, [activeSystems]);
+  }, [activeSystems, locus]);
 
   const viewRange = bounds / zoom;
 
@@ -64,7 +72,8 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
 
   // Generate tick marks
   const ticks = useMemo(() => {
-    const step = viewRange > 20 ? 10 : viewRange > 10 ? 5 : viewRange > 4 ? 2 : 1;
+    const magnitude = 10 ** Math.floor(Math.log10(viewRange / 4));
+    const step = Math.ceil(viewRange / 4 / magnitude) * magnitude;
     const list: number[] = [];
     for (let v = step; v <= viewRange * 1.5; v += step) {
       list.push(v);
@@ -186,11 +195,11 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
   return (
     <div className="flex flex-col h-full bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
       {/* Top Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 flex-shrink-0">
+      <div className="flex flex-wrap gap-2 items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Target className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
           <h3 className="font-semibold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-100">
-            Plano Complexo (s) — Polos e Zeros
+            {locus ? 'Root Locus — Lugar das Raízes' : 'Plano Complexo (s) — Polos e Zeros'}
           </h3>
         </div>
 
@@ -245,6 +254,8 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
           </button>
         </div>
       </div>
+
+      {controls}
 
       {/* SVG Canvas Area */}
       <div 
@@ -355,6 +366,23 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
           <text x={cx - 6} y={cy + 14} fill="#64748b" fontSize="10" textAnchor="end" className="font-mono">
             0
           </text>
+
+          {locus?.map(({ id, name, color, data, gain }) => (
+            <g key={`locus-${id}`}>
+              {data.branches.map((branch, index) => (
+                <polyline key={index} fill="none" stroke={color} strokeWidth="1.8" opacity="0.75"
+                  points={branch.map(root => { const point = sToSvg(root); return `${point.x},${point.y}`; }).join(' ')}>
+                  <title>{name}: trajetória dos polos</title>
+                </polyline>
+              ))}
+              {data.selectedPoles.map((root, index) => {
+                const point = sToSvg(root);
+                return <circle key={`selected-${index}`} cx={point.x} cy={point.y} r="5" fill={color} stroke="white" strokeWidth="1.5">
+                  <title>{name}: K = {gain}, s = {ComplexMath.format(root, 4)}</title>
+                </circle>;
+              })}
+            </g>
+          ))}
 
           {/* Draw Poles and Zeros for Each System */}
           {activeSystems.map(sys => {
@@ -507,17 +535,18 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems }) => {
 
       {/* Footer Legend */}
       <div className="flex flex-wrap items-center justify-between px-4 py-2 bg-slate-50/80 dark:bg-slate-950/80 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 gap-2 flex-shrink-0">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-1.5">
             <span className="text-slate-800 dark:text-slate-200 font-bold">×</span>
-            <span>Polos</span>
+            <span>{locus ? 'Polos em K = 0' : 'Polos'}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-slate-800 dark:text-slate-200 font-bold">○</span>
-            <span>Zeros</span>
+            <span>{locus ? 'Zeros (K = 1)' : 'Zeros'}</span>
           </div>
         </div>
 
+        {locus && <span>● Polos no K selecionado • Curvas: 0 ≤ K ≤ K máximo</span>}
         <div className="flex items-center gap-1 text-[11px] text-slate-500">
           <Info className="w-3.5 h-3.5 text-slate-400" />
           <span>Arraste para mover • Role para zoom • Passe o mouse nas raízes</span>
