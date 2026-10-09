@@ -43,6 +43,13 @@ function findPoles(coefficients: number[]): Complex[] {
   return roots;
 }
 
+// Share the sampling scale with playback so low-gain departures remain visible.
+export function rootLocusGain(progress: number, maxGain: number): number {
+  if (progress <= 0) return 0;
+  if (progress >= 1) return maxGain;
+  return maxGain * Math.expm1(progress * Math.log(1001)) / 1000;
+}
+
 export function calculateRootLocus(system: TransferFunction, maxGain: number, selectedGain?: number): RootLocusData {
   if (!Number.isFinite(maxGain) || maxGain <= 0 || maxGain > 1e6) {
     throw new Error('K máximo deve estar entre 0 e 1.000.000.');
@@ -58,7 +65,7 @@ export function calculateRootLocus(system: TransferFunction, maxGain: number, se
   let poles: Complex[] = [];
   let previousLeading = 0;
   // Logarithmic spacing resolves low-gain departures as well as large gains.
-  const gains = Array.from({ length: 401 }, (_, i) => maxGain * Math.expm1(i / 400 * Math.log(1001)) / 1000);
+  const gains = Array.from({ length: 401 }, (_, i) => rootLocusGain(i / 400, maxGain));
   gains[0] = 0;
   gains[gains.length - 1] = maxGain;
   for (const gain of gains) {

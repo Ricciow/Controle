@@ -16,7 +16,16 @@ try {
   const { Analyzer } = require(join(buildDirectory, 'analyzer.js'));
   const { TransferFunctionParser: parser } = require(join(buildDirectory, 'parser.js'));
   const { analyzeSymbolicRouth } = require(join(buildDirectory, 'symbolicRouth.js'));
-  const { calculateRootLocus, rootLocusCharacteristic, rootLocusPoles } = require(join(buildDirectory, 'rootLocus.js'));
+  const { calculateRootLocus, rootLocusCharacteristic, rootLocusPoles, rootLocusGain } = require(join(buildDirectory, 'rootLocus.js'));
+  for (const maximum of [0.001, 100, 1e6]) {
+    assert.equal(rootLocusGain(0, maximum), 0);
+    assert.equal(rootLocusGain(1, maximum), maximum);
+    assert.equal(rootLocusGain(2, maximum), maximum);
+    const animated = Array.from({ length: 101 }, (_, i) => rootLocusGain(i / 100, maximum));
+    assert.ok(animated.slice(1).every((gain, i) => gain > animated[i] && gain <= maximum));
+    assert.ok(rootLocusGain(0.1, maximum) < maximum / 100);
+    assert.ok(animated[1] - animated[0] < animated[100] - animated[99]);
+  }
   const locusSystem = { inputMode: 'expression', rawExpression: '1/(s*(s+2))' };
   assert.deepEqual(rootLocusCharacteristic(locusSystem, 4), [1, 2, 4]);
   const quadraticLocus = calculateRootLocus(locusSystem, 4, 4);

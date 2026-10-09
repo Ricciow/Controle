@@ -239,7 +239,7 @@ export const App: React.FC = () => {
                 )}
 
                 {enabledGraphs.locus && (
-                  <div className="h-[520px] sm:h-[560px] xl:h-[600px]">
+                  <div className="h-[640px] sm:h-[660px] xl:h-[660px]">
                     <RootLocusPlot systems={systems} />
                   </div>
                 )}
