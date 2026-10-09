@@ -29,13 +29,19 @@ export const SymbolicRouthTable: React.FC<{ system: TransferFunction }> = ({ sys
       </table>
     </div>
     {result.alwaysNonStable ? <p className="text-xs text-amber-700 dark:text-amber-400">A primeira coluna ou os casos especiais impedem estabilidade assintótica nesta família.</p> : <div className="space-y-2 text-xs">
-      <p className="font-semibold">Condições simultâneas para estabilidade assintótica:</p>
-      {result.conditions.length ? result.conditions.map(condition => <div key={condition} className="overflow-x-auto"><MathView math={condition} /></div>) : <p>Primeira coluna com sinais iguais para todos os valores admissíveis de K.</p>}
+      <p className="font-semibold">{result.stabilityCondition ? 'Faixa de K para estabilidade assintótica:' : 'Condições simultâneas para estabilidade assintótica:'}</p>
+      {result.stabilityCondition ? <div className="overflow-x-auto text-cyan-700 dark:text-cyan-300"><MathView math={result.stabilityCondition.latex} /></div>
+        : result.conditions.length ? result.conditions.map(condition => <div key={condition} className="overflow-x-auto"><MathView math={condition} /></div>) : <p>Primeira coluna com sinais iguais para todos os valores admissíveis de K.</p>}
+      {result.stabilityCondition?.approximate && <p className="text-slate-500 dark:text-slate-400">Limites numéricos aproximados.</p>}
     </div>}
-    {result.restrictions.length > 0 && <div className="text-xs space-y-1">
-      <p className="font-medium">Esta forma da tabela exige:</p>
-      {result.restrictions.map(restriction => <div key={restriction} className="overflow-x-auto"><MathView math={restriction} /></div>)}
-    </div>}
+    {(result.stabilityCondition || result.restrictions.length > 0) && <details open={!result.stabilityCondition} className="text-xs space-y-2">
+      <summary className="cursor-pointer text-slate-500 dark:text-slate-400">Ver desigualdades e restrições da tabela</summary>
+      {result.stabilityCondition && result.conditions.map(condition => <div key={condition} className="overflow-x-auto"><MathView math={condition} /></div>)}
+      {result.restrictions.length > 0 && <div className="space-y-1">
+        <p className="font-medium">Esta forma da tabela exige:</p>
+        {result.restrictions.map(restriction => <div key={restriction} className="overflow-x-auto"><MathView math={restriction} /></div>)}
+      </div>}
+    </details>}
     {result.notes.map(note => <p key={note} className="text-xs text-slate-500 dark:text-slate-400">{note}</p>)}
   </div>;
 };

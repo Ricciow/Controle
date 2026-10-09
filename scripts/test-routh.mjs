@@ -15,7 +15,7 @@ try {
   const { analyzeRouth } = require(join(buildDirectory, 'routh.js'));
   const { Analyzer } = require(join(buildDirectory, 'analyzer.js'));
   const { TransferFunctionParser: parser } = require(join(buildDirectory, 'parser.js'));
-  const { analyzeSymbolicRouth } = require(join(buildDirectory, 'symbolicRouth.js'));
+  const { analyzeSymbolicRouth, solveGainConditions } = require(join(buildDirectory, 'symbolicRouth.js'));
   const { calculateRootLocus, rootLocusCharacteristic, rootLocusPoles, rootLocusGain } = require(join(buildDirectory, 'rootLocus.js'));
   for (const maximum of [0.001, 100, 1e6]) {
     assert.equal(rootLocusGain(0, maximum), 0);
@@ -134,6 +134,65 @@ try {
   assert.equal(constantClosed.analysis.metrics.dcGain, 2 / 3);
   assert.ok(Analyzer.analyzeTransferFunction({ ...constant, rawExpression: '-1', unityFeedback: true }).error);
 
+  const signCases = [
+    [['240-K'], [], [[-Infinity, 240]]],
+    [['240-K', 'K'], [], [[0, 240]]],
+    [['-K'], [], [[-Infinity, 0]]],
+    [['(240-K)/(K-2)'], [], [[2, 240]]],
+    [['(240-K)/(K-2)', '-K'], [], []],
+    [['(K-1)^2'], [], [[-Infinity, 1], [1, Infinity]]],
+    [['-(K-1)^2'], [], []],
+    [['1/(K-2)'], [], [[2, Infinity]]],
+    [['-1/(K-2)^2'], [], []],
+    [['1/(K-2)^2'], [], [[-Infinity, 2], [2, Infinity]]],
+    [['K^2-2'], [], [[-Infinity, -Math.sqrt(2)], [Math.sqrt(2), Infinity]]],
+    [['K^2+1'], [], [[-Infinity, Infinity]]],
+    [['1'], ['K'], [[-Infinity, 0], [0, Infinity]]],
+    [['1'], ['0'], []],
+    [['K', 'K-10', '240-K'], [], [[10, 240]]],
+  ];
+  for (const [positive, nonZero, expected] of signCases) {
+    const solved = solveGainConditions(positive, nonZero);
+    assert.ok(solved, `Unresolved inequalities: ${positive}`);
+    assert.deepEqual(solved.intervals.map(({ lower, upper }) => [lower, upper]), expected, `${positive}, excluded ${nonZero}`);
+  }
+  assert.equal(solveGainConditions(['240-K'], []).latex, 'K < 240');
+  assert.equal(solveGainConditions(['240-K', 'K'], []).latex, '0 < K < 240');
+  assert.equal(solveGainConditions(['K^20+1'], []), null);
+  const cubicSigns = solveGainConditions(['K^3-3*K+1'], []);
+  assert.ok(cubicSigns.approximate && cubicSigns.intervals.length === 2);
+  for (const gain of [-10, -1.8, -1, 0, 0.5, 1, 2, 10]) {
+    assert.equal(cubicSigns.intervals.some(({ lower, upper }) => gain > lower && gain < upper), gain ** 3 - 3 * gain + 1 > 0);
+  }
+  const { Polynomial: gainPolynomial } = require(join(buildDirectory, 'polynomial.js'));
+  const gainFamilies = [
+    ['K/(s^3+12s^2+20s+K)', false, [[0, 240]]],
+    ['K/(-s^3-12s^2-20s-K)', false, [[0, 240]]],
+    ['K/(s*(s+4)*(s+6))', true, [[0, 240]]],
+    ['1/(s+1-K)', false, [[-Infinity, 1]]],
+    ['1/(s^2+(240-K)/(K-2)*s+1)', false, [[2, 240]]],
+    ['1/(K*(s+1))', false, [[-Infinity, 0], [0, Infinity]]],
+    ['(1/K)/(s+1)', true, [[-Infinity, -1], [0, Infinity]]],
+    ['1/(s^2+2s+1/K)', false, [[0, Infinity]]],
+    ['1/(s^2+(K-1)^2*s+1)', false, [[-Infinity, 1], [1, Infinity]]],
+    ['1/(s^2-(K-1)^2*s+1)', false, []],
+    ['1/(s^2+s/(K-2)^2+1)', false, [[-Infinity, 2], [2, Infinity]]],
+  ];
+  for (const [rawExpression, unityFeedback, expected] of gainFamilies) {
+    const family = { ...plant, rawExpression, unityFeedback };
+    const result = analyzeSymbolicRouth(family);
+    assert.ok(result.stabilityCondition, rawExpression);
+    assert.deepEqual(result.stabilityCondition.intervals.map(({ lower, upper }) => [lower, upper]), expected, rawExpression);
+    for (const kValue of [-10, -1.5, -0.5, 0.1, 1, 3, 20, 239, 241, 300]) {
+      let parsed;
+      try { parsed = parser.parseTransferFunction(rawExpression, kValue); }
+      catch { continue; }
+      const characteristic = unityFeedback ? gainPolynomial.add(parsed.denominator, parsed.numerator) : parsed.denominator;
+      const stable = result.stabilityCondition.intervals.some(({ lower, upper }) => kValue > lower && kValue < upper);
+      assert.equal(stable, analyzeRouth(characteristic).status === 'STABLE', `${rawExpression}: K=${kValue}`);
+    }
+  }
+  console.log('K inequalities passed: sign reversal, rational denominators, intersections, exclusions, negative leading coefficients and numeric Routh comparisons.');
   const symbolic = analyzeSymbolicRouth(closed);
   assert.equal(symbolic.rows.length, 4);
   assert.ok(symbolic.rows[2].values[0].includes('K'));
@@ -158,6 +217,8 @@ try {
       const numeric = Analyzer.analyzeTransferFunction({ ...parameterSystem, kValue });
       assert.equal(numeric.error, null);
       const numericResult = analyzeRouth(numeric.denominator);
+      assert.ok(symbolicResult.stabilityCondition, parameterSystem.rawExpression);
+      assert.equal(symbolicResult.stabilityCondition.intervals.some(({ lower, upper }) => kValue > lower && kValue < upper), numericResult.status === 'STABLE');
       assert.equal(symbolicResult.rows.length, numericResult.rows.length);
       for (let i = 0; i < symbolicResult.rows.length; i++) {
         for (let j = 0; j < symbolicResult.rows[i].values.length; j++) {
