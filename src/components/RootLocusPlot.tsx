@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pause, Play, RotateCcw } from 'lucide-react';
 import { PoleZeroPlot } from './PoleZeroPlot';
+import { RootLocusChecker } from './RootLocusChecker';
 import { TransferFunction } from '../core/types';
 import { calculateRootLocus, rootLocusGain, rootLocusPoles } from '../core/rootLocus';
 
@@ -53,7 +54,7 @@ export const RootLocusPlot: React.FC<{ systems: TransferFunction[] }> = ({ syste
   }] : []);
 
   return <PoleZeroPlot systems={displaySystems} locus={locus} controls={
-    <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-800 space-y-2 text-xs text-slate-600 dark:text-slate-300">
+    <div className="shrink-0 px-4 py-2 border-b border-slate-200 dark:border-slate-800 space-y-2 text-xs text-slate-600 dark:text-slate-300">
       <p>Realimentação unitária negativa: D(s) + K N(s) = 0. Se a expressão contém K, varia-se esse parâmetro em D(s, K) + N(s, K) = 0.</p>
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2">K máximo
@@ -108,6 +109,11 @@ export const RootLocusPlot: React.FC<{ systems: TransferFunction[] }> = ({ syste
       {entries.filter(entry => entry.error).map(({ system, error }) =>
         <p key={system.id} role="status" className="text-rose-600 dark:text-rose-400">{system.name}: {error}</p>)}
       {entries.length === 0 && <p>Adicione ou exiba um sistema válido para visualizar o LGR.</p>}
+      <RootLocusChecker systems={systems} onSelectGain={value => {
+        setIsPlaying(false);
+        setMaxGain(current => Math.max(current, value));
+        setGain(value);
+      }} />
     </div>
   } />;
 };

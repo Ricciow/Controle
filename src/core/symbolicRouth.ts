@@ -70,6 +70,40 @@ const rationalParts = (source: string) => {
 const polynomialCoefficients = (source: string, variable: string) =>
   nerdamer(`coeffs((${source}),${variable})`).toString().slice(1, -1).split(',').map(canonical);
 
+// Preserve the parameter rather than substituting the currently selected K.
+export function symbolicTransferExpression(system: TransferFunction): { latex: string; text: string } {
+  const [numerator, denominator] = expressionParts(system);
+  const outputDenominator = system.unityFeedback ? canonical(`(${denominator})+(${numerator})`) : canonical(denominator);
+  const outputNumerator = canonical(numerator);
+  return {
+    latex: `\\frac{${symbolicLatex(outputNumerator)}}{${symbolicLatex(outputDenominator)}}`,
+    text: `(${outputNumerator})/(${outputDenominator})`,
+  };
+}
+
+export function symbolicTransferLatex(system: TransferFunction): string {
+  return symbolicTransferExpression(system).latex;
+}
+
+// Coefficients in ascending powers of K, each a polynomial in s.
+// Clearing K-dependent divisors only generates candidates: the checker must
+// validate each candidate against the original, numeric characteristic.
+export function rootLocusGainCoefficients(system: TransferFunction): number[][] {
+  const [numerator, denominator] = expressionParts(system);
+  if (canonical(denominator) === '0') throw new Error('O denominador não pode ser zero.');
+  const explicitK = system.inputMode === 'expression' && /[kK]/.test(system.rawExpression);
+  const characteristic = canonical(`(${denominator})+${explicitK ? '' : 'K*'}(${numerator})`);
+  const [polynomial] = rationalParts(characteristic);
+  const coefficients = polynomialCoefficients(polynomial, 'K');
+  if (coefficients.length > 13) throw new Error('O checador suporta até 12ª ordem em K.');
+  return coefficients.map(coefficient => {
+    const values = polynomialCoefficients(coefficient, 's').reverse()
+      .map(value => Number(nerdamer(value).evaluate().text('decimals')));
+    if (!values.every(Number.isFinite)) throw new Error('Não foi possível obter os coeficientes em K.');
+    return values;
+  });
+}
+
 export interface GainConditions {
   latex: string;
   intervals: { lower: number; upper: number }[];

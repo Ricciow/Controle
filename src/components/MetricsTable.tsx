@@ -3,6 +3,8 @@ import { Table, CheckCircle2, AlertCircle, AlertTriangle } from 'lucide-react';
 import { TransferFunction } from '../core/types';
 import { ComplexMath } from '../core/complex';
 import { MathView } from './MathView';
+import { CopyFunctionButton } from './CopyFunctionButton';
+import { numericTransferText } from '../core/transferText';
 
 interface MetricsTableProps {
   systems: TransferFunction[];
@@ -66,7 +68,7 @@ export const MetricsTable: React.FC<MetricsTableProps> = ({ systems }) => {
 
                   {/* Function LaTeX */}
                   <td className="px-4 py-3 whitespace-nowrap text-slate-900 dark:text-slate-100">
-                    <MathView math={sys.latex} />
+                    <div className="flex items-center gap-2"><MathView math={sys.latex} /><CopyFunctionButton text={numericTransferText(sys)} label={`Copiar função de ${sys.name}`} /></div>
                   </td>
 
                   {/* Stability */}

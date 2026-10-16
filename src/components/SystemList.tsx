@@ -25,7 +25,7 @@ export const SystemList: React.FC<SystemListProps> = ({
   const visibleCount = systems.filter(s => s.visible).length;
 
   return (
-    <aside className="flex flex-col h-full bg-slate-50/70 dark:bg-slate-950/70 border-r border-slate-200 dark:border-slate-800/80 w-full lg:w-[380px] xl:w-[410px] flex-shrink-0 overflow-hidden transition-colors">
+    <aside className="flex flex-col h-full min-h-0 min-w-0 bg-slate-50/70 dark:bg-slate-950/70 border-r border-slate-200 dark:border-slate-800/80 w-full lg:w-[380px] xl:w-[410px] flex-shrink-0 overflow-hidden transition-colors">
       {/* Header Actions - Fixed at top of list */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-slate-950/90 flex-shrink-0">
         <div className="flex items-center gap-2">
@@ -55,7 +55,7 @@ export const SystemList: React.FC<SystemListProps> = ({
       </div>
 
       {/* Systems List - Independent Vertical Scrollbar */}
-      <div className="space-y-3 flex-1 overflow-y-auto p-3.5">
+      <div className="space-y-3 flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3.5">
         {systems.map((sys) => (
           <SystemCard
             key={sys.id}

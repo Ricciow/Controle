@@ -8,14 +8,15 @@ const require = createRequire(import.meta.url);
 const buildDirectory = mkdtempSync(join(process.cwd(), 'node_modules', '.routh-tests-'));
 try {
   const compilation = spawnSync(process.execPath, [require.resolve('typescript/bin/tsc'),
-    'src/core/routh.ts', 'src/core/analyzer.ts', 'src/core/symbolicRouth.ts', 'src/core/timePlot.ts', 'src/core/rootLocus.ts', '--outDir', buildDirectory, '--esModuleInterop',
+    'src/core/routh.ts', 'src/core/analyzer.ts', 'src/core/symbolicRouth.ts', 'src/core/timePlot.ts', 'src/core/rootLocus.ts', 'src/core/rootLocusCheck.ts', '--outDir', buildDirectory, '--esModuleInterop',
     '--module', 'commonjs', '--moduleResolution', 'node', '--target', 'ES2020', '--strict', '--skipLibCheck',
   ], { encoding: 'utf8' });
   assert.equal(compilation.status, 0, compilation.stdout + compilation.stderr);
   const { analyzeRouth } = require(join(buildDirectory, 'routh.js'));
   const { Analyzer } = require(join(buildDirectory, 'analyzer.js'));
   const { TransferFunctionParser: parser } = require(join(buildDirectory, 'parser.js'));
-  const { analyzeSymbolicRouth, solveGainConditions } = require(join(buildDirectory, 'symbolicRouth.js'));
+  const { analyzeSymbolicRouth, solveGainConditions, symbolicTransferLatex } = require(join(buildDirectory, 'symbolicRouth.js'));
+  const { checkRootLocusPoint } = require(join(buildDirectory, 'rootLocusCheck.js'));
   const { calculateRootLocus, rootLocusCharacteristic, rootLocusPoles, rootLocusGain } = require(join(buildDirectory, 'rootLocus.js'));
   for (const maximum of [0.001, 100, 1e6]) {
     assert.equal(rootLocusGain(0, maximum), 0);
@@ -27,6 +28,31 @@ try {
     assert.ok(animated[1] - animated[0] < animated[100] - animated[99]);
   }
   const locusSystem = { inputMode: 'expression', rawExpression: '1/(s*(s+2))' };
+  const checkPoint = (expression, re, im) => checkRootLocusPoint({ ...locusSystem, rawExpression: expression }, { re, im });
+  assert.deepEqual(checkPoint('1/(s*(s+2))', -1, 1), { belongs: true, gains: [2], allGains: false });
+  assert.deepEqual(checkPoint('K/(s*(s+2))', -1, -1), { belongs: true, gains: [2], allGains: false });
+  assert.deepEqual(checkPoint('1/(s*(s+2))', -2, 0), { belongs: true, gains: [0], allGains: false });
+  assert.equal(checkPoint('1/(s*(s+2))', -3, 0).belongs, false); // Requires negative K.
+  assert.equal(checkPoint('1/(s*(s+2))', -0.5, 1).belongs, false); // Complex required gain.
+  assert.deepEqual(checkPoint('1/(s*(s+2))', -1, 100), { belongs: true, gains: [10001], allGains: false });
+  assert.equal(checkPoint('1/(s*(s+2))', -1, 1.732051).belongs, true); // Rounded coordinate.
+  assert.deepEqual(checkPoint('K^2/(s+1)', -5, 0), { belongs: true, gains: [2], allGains: false });
+  assert.deepEqual(checkPoint('(K-2)^2/(s+1)', -2, 0), { belongs: true, gains: [1, 3], allGains: false });
+  assert.deepEqual(checkPoint('1/(K*(s+1))', -2, 0), { belongs: true, gains: [1], allGains: false });
+  assert.equal(checkPoint('1/(K*(s+1))', -1, 0).belongs, false); // No finite gain reaches the zero.
+  assert.equal(checkPoint('K/(s+1)', -1, 0).belongs, true); // K=0 endpoint.
+  assert.equal(checkPoint('1/(K*(s+1))', 0, 0).belongs, false); // K=-1 only.
+  assert.equal(checkPoint('-K', 0, 0).belongs, false); // Characteristic identically zero at K=1.
+  assert.deepEqual(checkPoint('(s+1)/((s+1)*(s+2))', -1, 0), { belongs: true, gains: [], allGains: true });
+  assert.equal(checkPoint('1/(s+1)', -1, 1).belongs, false);
+  assert.throws(() => checkPoint('1/(s+1)', Infinity, 0));
+  assert.throws(() => checkPoint('1/(s+1)', 0, NaN));
+  assert.deepEqual(checkRootLocusPoint({ inputMode: 'coefficients', numStr: '1', denStr: '1,2,0', unityFeedback: true }, { re: -1, im: 1 }).gains, [2]);
+  const feedbackPreview = { ...locusSystem, rawExpression: 'K/(s*(s+2))', unityFeedback: true, kValue: 3 };
+  assert.ok(symbolicTransferLatex(feedbackPreview).includes('K'));
+  assert.equal(symbolicTransferLatex(feedbackPreview), symbolicTransferLatex({ ...feedbackPreview, kValue: 10 }));
+  assert.ok(symbolicTransferLatex({ ...feedbackPreview, rawExpression: 'k*(s+3)/(s^2+2s+1)' }).includes('K'));
+  console.log('Coordinate checker: real and complex coordinates, nonnegative gains, explicit/nonlinear K, singular gains, fixed poles and symbolic preview passed.');
   assert.deepEqual(rootLocusCharacteristic(locusSystem, 4), [1, 2, 4]);
   const quadraticLocus = calculateRootLocus(locusSystem, 4, 4);
   assert.equal(quadraticLocus.branches.length, 2);

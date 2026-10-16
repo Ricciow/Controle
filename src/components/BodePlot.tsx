@@ -249,7 +249,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
       </div>
 
       {/* SVG Canvas */}
-      <div ref={containerRef} className="relative flex-1 bg-slate-50/50 dark:bg-slate-950 select-none overflow-hidden min-h-0 touch-none">
+      <div ref={containerRef} className="relative flex-1 bg-slate-50/50 dark:bg-slate-950 select-none overflow-hidden min-h-0 touch-pan-y">
         <svg
           ref={svgRef}
           className="w-full h-full"

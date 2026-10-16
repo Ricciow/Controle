@@ -118,7 +118,7 @@ export const App: React.FC = () => {
   const activeGraphCount = (enabledGraphs.step ? 1 : 0) + (enabledGraphs.roots ? 1 : 0) + (enabledGraphs.locus ? 1 : 0) + (enabledGraphs.bode ? 1 : 0) + (enabledGraphs.nyquist ? 1 : 0);
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden transition-colors">
+    <div className="app-shell flex flex-col w-full bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-clip transition-colors">
       {/* Top Navbar */}
       <Navbar
         enabledGraphs={enabledGraphs}
@@ -179,7 +179,7 @@ export const App: React.FC = () => {
       {/* Main Workspace Layout with Separate Scrollbars */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0 w-full">
         {/* Left Sidebar: Multi-System Management (Independent Scrollbar on Desktop, Tab on Mobile) */}
-        <div className={`h-full min-h-0 ${mobileTab === 'systems' ? 'flex flex-col flex-1 w-full' : 'hidden lg:flex lg:flex-col'}`}>
+        <div className={`h-full min-h-0 min-w-0 lg:flex-none ${mobileTab === 'systems' ? 'flex flex-col flex-1 w-full lg:w-auto' : 'hidden lg:flex lg:flex-col'}`}>
           <SystemList
             systems={systems}
             onAddSystem={handleOpenAddModal}
@@ -193,7 +193,7 @@ export const App: React.FC = () => {
 
         {/* Center / Right Content: Unified Graph Panel & Metrics Table */}
         <main
-          className={`flex-1 h-full overflow-y-auto p-3.5 sm:p-4 lg:p-5 min-h-0 bg-slate-100/60 dark:bg-slate-950/40 ${
+          className={`flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-3.5 sm:p-4 lg:p-5 min-h-0 bg-slate-100/60 dark:bg-slate-950/40 ${
             mobileTab === 'systems' ? 'hidden lg:block' : 'block'
           }`}
         >
@@ -222,8 +222,8 @@ export const App: React.FC = () => {
             </div>
 
             {/* Graphs Grid (Shown when on graphs tab or on desktop) */}
-            {(mobileTab === 'graphs' || window.innerWidth >= 1024) && hasAnyGraph && (
-              <div className={`grid grid-cols-1 ${activeGraphCount > 1 ? 'xl:grid-cols-2' : ''} gap-4 sm:gap-5`}>
+            {hasAnyGraph && (
+              <div className={`${mobileTab === 'graphs' ? 'grid' : 'hidden lg:grid'} grid-cols-1 ${activeGraphCount > 1 ? 'xl:grid-cols-2' : ''} items-start gap-4 sm:gap-5 [&>*]:min-w-0`}>
                 {/* 1. Resposta Temporal */}
                 {enabledGraphs.step && (
                   <div className="h-[420px] sm:h-[480px] xl:h-[520px]">
@@ -239,7 +239,7 @@ export const App: React.FC = () => {
                 )}
 
                 {enabledGraphs.locus && (
-                  <div className="h-[640px] sm:h-[660px] xl:h-[660px]">
+                  <div className="min-w-0">
                     <RootLocusPlot systems={systems} />
                   </div>
                 )}
@@ -261,14 +261,14 @@ export const App: React.FC = () => {
             )}
 
             {/* Metrics Comparison Table */}
-            {(mobileTab === 'table' || (mobileTab === 'graphs' && enabledGraphs.table) || window.innerWidth >= 1024) && enabledGraphs.table && (
-              <div className={mobileTab === 'table' ? 'block' : ''}>
+            {enabledGraphs.table && (
+              <div className={mobileTab === 'systems' ? 'hidden lg:block' : 'block'}>
                 <MetricsTable systems={systems} />
               </div>
             )}
 
-            {(mobileTab === 'table' || mobileTab === 'graphs') && enabledGraphs.routh && (
-              <RouthTable systems={systems} />
+            {enabledGraphs.routh && (
+              <div className={mobileTab === 'systems' ? 'hidden lg:block' : 'block'}><RouthTable systems={systems} /></div>
             )}
 
             {/* If no graphs or tables are enabled */}

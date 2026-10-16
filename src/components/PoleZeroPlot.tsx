@@ -140,14 +140,7 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!touchStateRef.current) return;
-    if (e.touches.length === 1) {
-      const t = e.touches[0];
-      const dx = t.clientX - touchStateRef.current.lastX;
-      const dy = t.clientY - touchStateRef.current.lastY;
-      setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
-      touchStateRef.current.lastX = t.clientX;
-      touchStateRef.current.lastY = t.clientY;
-    } else if (e.touches.length === 2 && touchStateRef.current.lastDist !== null) {
+    if (e.touches.length === 2 && touchStateRef.current.lastDist !== null) {
       const t1 = e.touches[0];
       const t2 = e.touches[1];
       const currentDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
@@ -159,12 +152,6 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
 
   const handleTouchEnd = () => {
     touchStateRef.current = null;
-  };
-
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
-    setZoom(prev => Math.max(0.2, Math.min(10, prev * zoomFactor)));
   };
 
   const resetView = () => {
@@ -193,7 +180,7 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
   };
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
+    <div className={`flex flex-col min-w-0 ${locus ? '' : 'h-full'} bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors`}>
       {/* Top Header */}
       <div className="flex flex-wrap gap-2 items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 flex-shrink-0">
         <div className="flex items-center gap-2">
@@ -260,7 +247,7 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
       {/* SVG Canvas Area */}
       <div 
         ref={containerRef}
-        className="relative flex-1 bg-slate-50/50 dark:bg-slate-950 cursor-crosshair select-none overflow-hidden min-h-0 touch-none"
+        className={`relative ${locus ? 'h-[360px] sm:h-[420px] shrink-0' : 'flex-1 min-h-0'} bg-slate-50/50 dark:bg-slate-950 cursor-crosshair select-none overflow-hidden touch-pan-y`}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -268,7 +255,6 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onWheel={handleWheel}
       >
         <svg 
           ref={svgRef}
@@ -549,7 +535,7 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
         {locus && <span>● Polos no K selecionado • Curvas: 0 ≤ K ≤ K máximo</span>}
         <div className="flex items-center gap-1 text-[11px] text-slate-500">
           <Info className="w-3.5 h-3.5 text-slate-400" />
-          <span>Arraste para mover • Role para zoom • Passe o mouse nas raízes</span>
+          <span>Arraste com o mouse para mover • Use +/− para zoom • Role para navegar na página</span>
         </div>
       </div>
     </div>

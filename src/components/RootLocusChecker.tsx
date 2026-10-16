@@ -1,0 +1,68 @@
+import React, { useMemo, useState } from 'react';
+import { Complex, TransferFunction } from '../core/types';
+import { ComplexMath } from '../core/complex';
+import { checkRootLocusPoint } from '../core/rootLocusCheck';
+
+export const RootLocusChecker: React.FC<{
+  systems: TransferFunction[];
+  onSelectGain: (gain: number) => void;
+}> = ({ systems, onSelectGain }) => {
+  const [real, setReal] = useState('-1');
+  const [imaginary, setImaginary] = useState('1');
+  const [point, setPoint] = useState<Complex | null>(null);
+  const [inputError, setInputError] = useState('');
+  const results = useMemo(() => point ? systems.filter(system => system.visible && system.analysis).map(system => {
+    try {
+      return { system, result: checkRootLocusPoint(system, point), error: null };
+    } catch (error) {
+      return { system, result: null, error: error instanceof Error ? error.message : 'Não foi possível verificar.' };
+    }
+  }) : [], [systems, point]);
+
+  return <div className="border-t border-slate-200 dark:border-slate-800 pt-2 space-y-2">
+    <p className="font-semibold text-slate-800 dark:text-slate-100">Verificar coordenada no LGR</p>
+    <form className="flex flex-wrap items-end gap-2" onSubmit={event => {
+      event.preventDefault();
+      const re = Number(real.trim().replace(',', '.'));
+      const im = Number(imaginary.trim().replace(',', '.'));
+      if (!real.trim() || !imaginary.trim() || ![re, im].every(Number.isFinite)) {
+        setPoint(null);
+        setInputError('Informe números finitos nas partes real e imaginária.');
+        return;
+      }
+      setInputError('');
+      setPoint({ re, im });
+    }}>
+      <label className="flex flex-col gap-1">Parte real (σ)
+        <input aria-label="Parte real da coordenada" inputMode="decimal" value={real}
+          onChange={event => { setReal(event.target.value); setPoint(null); setInputError(''); }}
+          className="w-28 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 font-mono" />
+      </label>
+      <label className="flex flex-col gap-1">Parte imaginária (ω)
+        <input aria-label="Parte imaginária da coordenada" inputMode="decimal" value={imaginary}
+          onChange={event => { setImaginary(event.target.value); setPoint(null); setInputError(''); }}
+          className="w-28 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 font-mono" />
+      </label>
+      <button type="submit" className="rounded-md bg-cyan-600 px-2.5 py-1.5 font-semibold text-white hover:bg-cyan-500">Verificar coordenada</button>
+    </form>
+    <p className="text-[11px] text-slate-500 dark:text-slate-400">s = σ + jω. Busca K ≥ 0, inclusive fora da faixa desenhada. Tolerância relativa: 10⁻⁶.</p>
+    <div role="status" aria-live="polite" className="space-y-1.5">
+      {inputError && <p className="text-rose-600 dark:text-rose-400">{inputError}</p>}
+      {point && <p className="font-mono">s = {ComplexMath.format(point, 6)}</p>}
+      {results.map(({ system, result, error }) => <div key={system.id} className="rounded border border-slate-200 dark:border-slate-700 p-2">
+        <span className="font-semibold">{system.name}: </span>
+        {error ? <span className="text-rose-600 dark:text-rose-400">{error}</span>
+          : result?.allGains ? <span>Pertence ao LGR para todo K ≥ 0 em que a planta e a equação característica estejam definidas (polo fixo).</span>
+          : result?.belongs ? <>
+            <span className="text-emerald-700 dark:text-emerald-400">Pertence ao LGR. </span>
+            {result.gains.map(gain => <span key={gain} className="inline-flex flex-wrap items-center gap-1.5 mr-2">
+              <span className="font-mono">K ≈ {Number(gain.toPrecision(8))}</span>
+              {gain <= 1e6 && <button type="button" onClick={() => onSelectGain(gain)}
+                className="rounded border border-cyan-400/50 px-1.5 py-0.5 text-cyan-700 dark:text-cyan-300">Mostrar este K</button>}
+            </span>)}
+          </> : <span>Não pertence ao LGR para K ≥ 0.</span>}
+      </div>)}
+      {point && results.length === 0 && <p>Adicione ou exiba um sistema válido para verificar a coordenada.</p>}
+    </div>
+  </div>;
+};

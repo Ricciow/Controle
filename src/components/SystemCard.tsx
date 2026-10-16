@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Eye, 
   EyeOff, 
@@ -14,6 +14,9 @@ import { ComplexMath } from '../core/complex';
 import { Analyzer } from '../core/analyzer';
 import { KControl } from './KControl';
 import { FeedbackControl } from './FeedbackControl';
+import { symbolicTransferExpression } from '../core/symbolicRouth';
+import { numericTransferText } from '../core/transferText';
+import { CopyFunctionButton } from './CopyFunctionButton';
 
 interface SystemCardProps {
   system: TransferFunction;
@@ -85,6 +88,14 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const hasK = system.inputMode === 'expression' && /[kK]/.test(system.rawExpression);
+  const symbolicPreview = useMemo(() => {
+    if (!hasK || !system.unityFeedback) return null;
+    try {
+      return { ...symbolicTransferExpression(system), error: null };
+    } catch {
+      return { latex: null, text: '', error: 'Não foi possível exibir a expressão simbólica. Confira a sintaxe.' };
+    }
+  }, [hasK, system.inputMode, system.rawExpression, system.unityFeedback]);
 
   const handleModeChange = (mode: InputMode) => {
     onUpdate({
@@ -303,6 +314,16 @@ export const SystemCard: React.FC<SystemCardProps> = ({
         {hasK && <KControl value={system.kValue ?? 1} onChange={kValue => onUpdate({ ...system, kValue })} />}
         <FeedbackControl enabled={system.unityFeedback ?? false} onChange={unityFeedback => onUpdate({ ...system, unityFeedback })} />
 
+        {symbolicPreview && <div className="min-w-0 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-cyan-50/50 dark:bg-cyan-950/30 p-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+            <p className="text-[11px] font-semibold text-cyan-700 dark:text-cyan-300">Malha fechada em função de K</p>
+            {symbolicPreview.latex && <CopyFunctionButton text={symbolicPreview.text} label="Copiar função em K" />}
+          </div>
+          {symbolicPreview.latex ? <div className="overflow-x-auto py-1"><MathView math={`T(s,K) = ${symbolicPreview.latex}`} block /></div>
+            : <p className="text-xs text-slate-500">{symbolicPreview.error}</p>}
+          <p className="text-[10px] text-slate-500 dark:text-slate-400">A expressão numérica abaixo usa K = {system.kValue ?? 1}.</p>
+        </div>}
+
         {/* Error Display */}
         {system.error && (
           <div className="flex items-center gap-1.5 p-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg text-xs text-rose-600 dark:text-rose-400">
@@ -314,6 +335,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
         {/* LaTeX Math Preview */}
         {!system.error && system.latex && (
           <div className="bg-slate-50 dark:bg-slate-950/60 rounded-lg p-2.5 border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center relative group">
+            <div className="self-end"><CopyFunctionButton text={numericTransferText(system)} /></div>
             <div className="text-center overflow-x-auto max-w-full py-1 text-slate-900 dark:text-slate-100">
               <MathView 
                 math={`${system.unityFeedback ? 'T(s)' : system.name} = ${showFactored && system.factoredLatex ? system.factoredLatex : system.latex}`}
