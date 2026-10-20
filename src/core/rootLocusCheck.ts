@@ -1,3 +1,4 @@
+import nerdamer from 'nerdamer';
 import { Complex, TransferFunction } from './types';
 import { ComplexMath } from './complex';
 import { Roots } from './roots';
@@ -8,6 +9,22 @@ export interface RootLocusCheck {
   belongs: boolean;
   gains: number[];
   allGains: boolean;
+}
+
+export function parsePointCoordinate(input: string): number {
+  const expression = input.trim().replace(/,/g, '.');
+  try {
+    if (!expression) throw new Error();
+    const numeric = Number(expression);
+    if (Number.isFinite(numeric)) return numeric;
+    if (!/^(?:sqrt|sin|cos|tan|asin|acos|atan|abs|log|exp|pi|[eE\d+\-*/^().\s])+$/.test(expression)) throw new Error();
+    const evaluated = nerdamer(expression).evaluate();
+    const value = Number(evaluated.text('decimals'));
+    if (evaluated.variables().length || !Number.isFinite(value)) throw new Error();
+    return value;
+  } catch {
+    throw new Error('Informe números ou expressões reais finitas, como sqrt(2)/2.');
+  }
 }
 
 const tolerance = 1e-6;

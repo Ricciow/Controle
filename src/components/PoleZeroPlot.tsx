@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Target, Info } from 'lucide-react';
 import { TransferFunction, Complex } from '../core/types';
 import { ComplexMath } from '../core/complex';
@@ -11,6 +11,7 @@ interface PoleZeroPlotProps {
   systems: TransferFunction[];
   locus?: { id: string; name: string; color: string; data: RootLocusData; gain: number }[];
   controls?: React.ReactNode;
+  onLocusViewChange?: (radius: number) => void;
 }
 
 interface HoveredRoot {
@@ -22,7 +23,7 @@ interface HoveredRoot {
   screenY: number;
 }
 
-export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, controls }) => {
+export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, controls, onLocusViewChange }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [zoom, setZoom] = useState(1.0);
@@ -49,7 +50,7 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
       });
     });
     locus?.forEach(({ data }) => {
-      [...data.branches.flat(), ...data.selectedPoles].forEach(root => {
+      data.selectedPoles.forEach(root => {
         maxAbs = Math.max(maxAbs, Math.abs(root.re), Math.abs(root.im));
       });
     });
@@ -63,6 +64,10 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
   const cx = width / 2 + pan.x;
   const cy = height / 2 + pan.y;
   const scale = (Math.min(width, height) * 0.42) / viewRange;
+  useEffect(() => {
+    const radius = Math.hypot(Math.max(cx, width - cx), Math.max(cy, height - cy)) / scale;
+    if (Number.isFinite(radius) && radius > 0) onLocusViewChange?.(radius);
+  }, [cx, cy, scale, onLocusViewChange]);
 
   const sToSvg = (s: Complex) => {
     return {
@@ -419,7 +424,7 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
           </div>
         </div>
 
-        {locus && <span>● Polos no K selecionado • Curvas: 0 ≤ K ≤ K máximo</span>}
+        {locus && <span>● Polos no K selecionado • K → ∞</span>}
         <div className="flex items-center gap-1 text-[11px] text-slate-500">
           <Info className="w-3.5 h-3.5 text-slate-400" />
           <span>Arraste para mover · Ctrl + rolagem para zoom</span>

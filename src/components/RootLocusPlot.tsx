@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pause, Play, RotateCcw } from 'lucide-react';
 import { PoleZeroPlot } from './PoleZeroPlot';
 import { TransferFunction } from '../core/types';
-import { calculateRootLocus, rootLocusGain, rootLocusPoles } from '../core/rootLocus';
+import { advanceRootLocusGain, calculateRootLocus, rootLocusGainForRadius, rootLocusPoles } from '../core/rootLocus';
+import { rootLocusGainCoefficients } from '../core/symbolicRouth';
 
 export const RootLocusPlot: React.FC<{ systems: TransferFunction[] }> = ({ systems }) => {
   const [maxGain, setMaxGain] = useState(100);
@@ -11,6 +12,15 @@ export const RootLocusPlot: React.FC<{ systems: TransferFunction[] }> = ({ syste
   const [speed, setSpeed] = useState(1);
   const gainRef = useRef(gain);
   useEffect(() => { gainRef.current = gain; }, [gain]);
+  const polynomials = useMemo(() => systems.filter(system => system.visible && system.analysis).flatMap(system => {
+    try { return [rootLocusGainCoefficients(system)]; } catch { return []; }
+  }), [systems]);
+  const expandToView = useCallback((radius: number) => {
+    const required = polynomials.reduce((maximum, coefficients) => {
+      try { return Math.max(maximum, rootLocusGainForRadius(coefficients, radius) ?? 0); } catch { return maximum; }
+    }, 0);
+    if (required > 0) setMaxGain(current => Math.max(current, required));
+  }, [polynomials]);
   const curves = useMemo(() => systems.filter(system => system.visible && system.analysis).map(system => {
     try {
       return { system, data: calculateRootLocus(system, maxGain), error: null };
@@ -22,20 +32,21 @@ export const RootLocusPlot: React.FC<{ systems: TransferFunction[] }> = ({ syste
   useEffect(() => {
     if (!canAnimate) { setIsPlaying(false); return; }
     if (!isPlaying) return;
-    let progress = Math.log1p(1000 * gainRef.current / maxGain) / Math.log(1001);
     let lastTime = performance.now();
     let frame: number;
     const advance = (time: number) => {
       // Cap the elapsed time so returning from a background tab cannot skip the locus.
-      progress = Math.min(1, progress + Math.min(time - lastTime, 100) * speed / 30000);
+      const next = advanceRootLocusGain(gainRef.current, time - lastTime, speed);
       lastTime = time;
-      setGain(Number(rootLocusGain(progress, maxGain).toPrecision(6)));
-      if (progress >= 1) { setIsPlaying(false); return; }
+      gainRef.current = next;
+      setGain(next);
+      setMaxGain(current => next >= current * 0.8 ? Math.max(next, Math.min(Number.MAX_VALUE, current * 10)) : current);
+      if (next === Number.MAX_VALUE) { setIsPlaying(false); return; }
       frame = requestAnimationFrame(advance);
     };
     frame = requestAnimationFrame(advance);
     return () => cancelAnimationFrame(frame);
-  }, [canAnimate, isPlaying, maxGain, speed]);
+  }, [canAnimate, isPlaying, speed]);
   const entries = useMemo(() => curves.map(entry => {
     if (!entry.data) return entry;
     try {
@@ -52,44 +63,28 @@ export const RootLocusPlot: React.FC<{ systems: TransferFunction[] }> = ({ syste
     id: system.id, name: system.name, color: system.color, data, gain,
   }] : []);
 
-  return <PoleZeroPlot systems={displaySystems} locus={locus} controls={
+  return <PoleZeroPlot systems={displaySystems} locus={locus} onLocusViewChange={expandToView} controls={
     <div className="shrink-0 px-4 py-2 border-b border-slate-200 dark:border-slate-800 space-y-2 text-xs text-slate-600 dark:text-slate-300">
       <p>Realimentação unitária negativa: D(s) + K N(s) = 0. Se a expressão contém K, varia-se esse parâmetro em D(s, K) + N(s, K) = 0.</p>
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2">K máximo
-          <input type="number" aria-label="K máximo do root locus" min="0.001" step="any" value={maxGain}
-            onChange={event => {
-              const value = event.target.valueAsNumber;
-              if (Number.isFinite(value) && value > 0) {
-                setIsPlaying(false);
-                setMaxGain(value);
-                setGain(current => Math.min(current, value));
-              }
-            }} className="w-24 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 font-mono" />
-        </label>
-        <button type="button" onClick={() => {
-          if (Number.isFinite(maxGain * 10)) { setIsPlaying(false); setMaxGain(maxGain * 10); }
-        }} className="rounded bg-cyan-600 px-2 py-1 text-white">Estender curva</button>
         <label className="flex items-center gap-2">K selecionado
-          <input type="number" aria-label="K selecionado do root locus" min="0" max={maxGain} step="any" value={gain}
+          <input type="number" aria-label="K selecionado do root locus" min="0" step="any" value={Number(gain.toPrecision(8))}
             onChange={event => {
               const value = event.target.valueAsNumber;
-              if (Number.isFinite(value) && value >= 0 && value <= maxGain) {
+              if (Number.isFinite(value) && value >= 0) {
                 setIsPlaying(false);
                 setGain(value);
+                setMaxGain(current => Math.max(current, value));
               }
             }} className="w-24 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 font-mono" />
         </label>
-        <input type="range" aria-label="Variar K no root locus" min="0" max={maxGain} step={maxGain / 1000} value={gain}
-          onChange={event => { setIsPlaying(false); setGain(event.target.valueAsNumber); }} className="min-w-24 flex-1 accent-cyan-600" />
+        <input type="range" aria-label="Variar K no root locus" aria-valuetext={`K = ${Number(gain.toPrecision(8))}`} min="0" max="1" step="0.001" value={Math.log1p(gain) / Math.log1p(maxGain)}
+          onChange={event => { setIsPlaying(false); setGain(Math.expm1(event.target.valueAsNumber * Math.log1p(maxGain))); }} className="min-w-24 flex-1 accent-cyan-600" />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" disabled={!canAnimate} aria-pressed={isPlaying}
           aria-label={isPlaying ? 'Pausar animação do root locus' : 'Animar root locus'}
-          onClick={() => {
-            if (!isPlaying && gain >= maxGain) setGain(0);
-            setIsPlaying(current => !current);
-          }} className="flex items-center gap-1.5 rounded-md bg-cyan-600 px-2.5 py-1.5 font-semibold text-white hover:bg-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed">
+          onClick={() => setIsPlaying(current => !current)} className="flex items-center gap-1.5 rounded-md bg-cyan-600 px-2.5 py-1.5 font-semibold text-white hover:bg-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed">
           {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
           {isPlaying ? 'Pausar' : 'Animar'}
         </button>
@@ -106,7 +101,7 @@ export const RootLocusPlot: React.FC<{ systems: TransferFunction[] }> = ({ syste
             <option value="2">Rápida (2×)</option>
           </select>
         </label>
-        <span className="text-[11px] text-slate-500 dark:text-slate-400">Avanço suave, mais lento perto de K = 0.</span>
+        <span className="text-[11px] text-slate-500 dark:text-slate-400">K → ∞ · Extensão automática</span>
       </div>
       {entries.filter(entry => entry.error).map(({ system, error }) =>
         <p key={system.id} role="status" className="text-rose-600 dark:text-rose-400">{system.name}: {error}</p>)}

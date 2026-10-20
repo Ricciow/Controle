@@ -15,9 +15,17 @@ try {
   const { analyzeRouth } = require(join(buildDirectory, 'routh.js'));
   const { Analyzer } = require(join(buildDirectory, 'analyzer.js'));
   const { TransferFunctionParser: parser } = require(join(buildDirectory, 'parser.js'));
-  const { analyzeSymbolicRouth, solveGainConditions, symbolicTransferLatex } = require(join(buildDirectory, 'symbolicRouth.js'));
-  const { checkRootLocusPoint, rootLocusDistances } = require(join(buildDirectory, 'rootLocusCheck.js'));
-  const { calculateRootLocus, rootLocusCharacteristic, rootLocusPoles, rootLocusGain } = require(join(buildDirectory, 'rootLocus.js'));
+  const { analyzeSymbolicRouth, solveGainConditions, symbolicTransferLatex, rootLocusGainCoefficients } = require(join(buildDirectory, 'symbolicRouth.js'));
+  const { checkRootLocusPoint, parsePointCoordinate, rootLocusDistances } = require(join(buildDirectory, 'rootLocusCheck.js'));
+  for (const [expression, expected] of [
+    ['sqrt(2)/2', Math.SQRT1_2], ['-sqrt(2)/2', -Math.SQRT1_2],
+    ['(1+sqrt(5))/2', (1 + Math.sqrt(5)) / 2], ['1/3', 1 / 3],
+    ['2^3', 8], ['1,5', 1.5], ['1e-3/2', 0.0005], ['sin(pi/2)', 1],
+  ]) assert.ok(Math.abs(parsePointCoordinate(expression) - expected) < 1e-12, expression);
+  for (const expression of ['', ' ', 'NaN', 'Infinity', '1/0', 'sqrt(-1)', 's+1', 'sqrt(', 'a=1']) {
+    assert.throws(() => parsePointCoordinate(expression), /expressões reais finitas/, expression);
+  }
+  const { calculateRootLocus, rootLocusCharacteristic, rootLocusPoles, rootLocusGain, advanceRootLocusGain, rootLocusGainForRadius } = require(join(buildDirectory, 'rootLocus.js'));
   for (const maximum of [0.001, 100, 1e6]) {
     assert.equal(rootLocusGain(0, maximum), 0);
     assert.equal(rootLocusGain(1, maximum), maximum);
@@ -28,6 +36,25 @@ try {
     assert.ok(animated[1] - animated[0] < animated[100] - animated[99]);
   }
   const locusSystem = { inputMode: 'expression', rawExpression: '1/(s*(s+2))' };
+  let continuousGain = 0;
+  for (let i = 0; i < 1200; i++) continuousGain = advanceRootLocusGain(continuousGain, 100, 2);
+  assert.ok(continuousGain > 1e6 && Number.isFinite(continuousGain));
+  assert.ok(advanceRootLocusGain(100, 16, 1) > 100);
+  assert.equal(advanceRootLocusGain(1, 10000, 1), advanceRootLocusGain(1, 100, 1));
+  assert.ok(advanceRootLocusGain(0, 100, 2) > advanceRootLocusGain(0, 100, 1));
+  assert.equal(advanceRootLocusGain(1, 0, 1), 1);
+  assert.ok(Number.isFinite(advanceRootLocusGain(Number.MAX_VALUE, 100, 2)));
+  for (const radius of [10, 100, 1e4]) {
+    const required = rootLocusGainForRadius(rootLocusGainCoefficients(locusSystem), radius);
+    assert.ok(required > 0 && Number.isFinite(required));
+    assert.ok(rootLocusPoles(locusSystem, required).every(pole => Math.hypot(pole.re, pole.im) > radius));
+  }
+  const nonlinearExtent = { ...locusSystem, rawExpression: 'K^2/(s+1)' };
+  const nonlinearGain = rootLocusGainForRadius(rootLocusGainCoefficients(nonlinearExtent), 100);
+  assert.ok(rootLocusPoles(nonlinearExtent, nonlinearGain).every(pole => Math.abs(pole.re) > 100));
+  assert.equal(rootLocusGainForRadius([[1, 1]], 100), null);
+  assert.throws(() => rootLocusGainForRadius([[1], [1]], Infinity));
+  assert.ok(rootLocusGain(1 / 400, 1e12) < 1); // Large horizons keep the low-gain departure visible.
   const checkPoint = (expression, re, im) => checkRootLocusPoint({ ...locusSystem, rawExpression: expression }, { re, im });
   const assertPointGains = (result, expected) => {
     assert.equal(result.belongs, true);

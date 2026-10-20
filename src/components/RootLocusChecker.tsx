@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Complex, TransferFunction } from '../core/types';
 import { ComplexMath } from '../core/complex';
-import { checkRootLocusPoint, rootLocusDistances } from '../core/rootLocusCheck';
+import { checkRootLocusPoint, parsePointCoordinate, rootLocusDistances } from '../core/rootLocusCheck';
 import { RootLocusDistancePlot } from './RootLocusDistancePlot';
 
 export const RootLocusChecker: React.FC<{
@@ -23,25 +23,25 @@ export const RootLocusChecker: React.FC<{
     <p className="font-semibold text-slate-800 dark:text-slate-100">Verificar coordenada no LGR</p>
     <form className="flex flex-wrap items-end gap-2" onSubmit={event => {
       event.preventDefault();
-      const re = Number(real.trim().replace(',', '.'));
-      const im = Number(imaginary.trim().replace(',', '.'));
-      if (!real.trim() || !imaginary.trim() || ![re, im].every(Number.isFinite)) {
+      try {
+        const re = parsePointCoordinate(real);
+        const im = parsePointCoordinate(imaginary);
+        setInputError('');
+        setPoint({ re, im });
+      } catch (error) {
         setPoint(null);
-        setInputError('Informe números finitos nas partes real e imaginária.');
-        return;
+        setInputError((error as Error).message);
       }
-      setInputError('');
-      setPoint({ re, im });
     }}>
       <label className="flex flex-col gap-1">Parte real (σ)
-        <input aria-label="Parte real da coordenada" inputMode="decimal" value={real}
+        <input aria-label="Parte real da coordenada" placeholder="sqrt(2)/2" value={real}
           onChange={event => { setReal(event.target.value); setPoint(null); setInputError(''); }}
-          className="w-28 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 font-mono" />
+          className="w-36 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 font-mono" />
       </label>
       <label className="flex flex-col gap-1">Parte imaginária (ω)
-        <input aria-label="Parte imaginária da coordenada" inputMode="decimal" value={imaginary}
+        <input aria-label="Parte imaginária da coordenada" placeholder="sqrt(2)/2" value={imaginary}
           onChange={event => { setImaginary(event.target.value); setPoint(null); setInputError(''); }}
-          className="w-28 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 font-mono" />
+          className="w-36 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 font-mono" />
       </label>
       <button type="submit" className="rounded-md bg-cyan-600 px-2.5 py-1.5 font-semibold text-white hover:bg-cyan-500">Verificar coordenada</button>
     </form>

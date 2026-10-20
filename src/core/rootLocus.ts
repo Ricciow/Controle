@@ -47,7 +47,30 @@ function findPoles(coefficients: number[]): Complex[] {
 export function rootLocusGain(progress: number, maxGain: number): number {
   if (progress <= 0) return 0;
   if (progress >= 1) return maxGain;
-  return maxGain * (Math.expm1(progress * Math.log(1001)) / 1000);
+  const scale = Math.min(1, maxGain / 1000) || maxGain;
+  return scale * Math.expm1(progress * Math.log1p(maxGain / scale));
+}
+
+export function advanceRootLocusGain(gain: number, elapsedMs: number, speed: number): number {
+  const next = Math.expm1(Math.log1p(gain) + Math.max(0, Math.min(elapsedMs, 100)) * speed * Math.log(101) / 30000);
+  return Number.isFinite(next) ? next : Number.MAX_VALUE;
+}
+
+// Bound gains on a circle outside the visible plane and the leading K term's
+// zeros. For nonlinear K, use the Cauchy bound for the characteristic in K.
+export function rootLocusGainForRadius(polynomials: number[][], radius: number): number | null {
+  if (!Number.isFinite(radius) || radius <= 0) throw new Error('Raio inválido.');
+  if (polynomials.length < 2) return null;
+  const leading = polynomials[polynomials.length - 1];
+  if (leading.every(value => value === 0)) return null;
+  const zeros = findPoles(leading);
+  const outer = Math.max(radius * 1.1, ...zeros.map(zero => Math.hypot(zero.re, zero.im) * 1.1 + 1));
+  const denominator = Math.log(Math.abs(leading[0])) + zeros.reduce((sum, zero) => sum + Math.log(outer - Math.hypot(zero.re, zero.im)), 0);
+  const logarithm = Math.max(...polynomials.slice(0, -1).filter(polynomial => polynomial.some(value => value !== 0)).map(polynomial =>
+    Math.log(Math.abs(polynomial[0])) + findPoles(polynomial).reduce((sum, pole) => sum + Math.log(outer + Math.hypot(pole.re, pole.im)), 0) - denominator));
+  const bound = Math.exp(logarithm) + (polynomials.length > 2 ? 1 : 0);
+  const required = 10 ** Math.ceil(Math.log10(bound || 1));
+  return Number.isFinite(required) && required > 0 ? required : Number.MAX_VALUE;
 }
 
 export function calculateRootLocus(system: TransferFunction, maxGain: number, selectedGain?: number): RootLocusData {
