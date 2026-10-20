@@ -20,14 +20,37 @@ function distanceProduct(coefficients: number[], point: Complex) {
   const roots = Roots.findRoots(normalized.map((value, i) => value / scale ** i));
   let magnitude = Math.abs(coefficients[0]);
   let angle = coefficients[0] < 0 ? Math.PI : 0;
-  for (const root of roots) {
-    const re = point.re - root.re * scale;
-    const im = point.im - root.im * scale;
-    magnitude *= Math.hypot(re, im);
-    angle += Math.atan2(im, re);
-  }
+  const vectors = roots.map(root => {
+    const origin = { re: root.re * scale, im: root.im * scale };
+    const re = point.re - origin.re;
+    const im = point.im - origin.im;
+    const distance = Math.hypot(re, im);
+    const phase = Math.atan2(im, re);
+    magnitude *= distance;
+    angle += phase;
+    return { origin, distance, angle: phase };
+  });
   if (![magnitude, angle].every(Number.isFinite)) throw new Error('Coordenada fora da faixa numérica.');
-  return { magnitude, angle };
+  return { magnitude, angle, vectors };
+}
+
+export function rootLocusDistances(system: TransferFunction, point: Complex) {
+  if (![point.re, point.im].every(Number.isFinite)) throw new Error('Informe partes real e imaginária finitas.');
+  const polynomials = rootLocusGainCoefficients(system);
+  if (polynomials.length !== 2 || polynomials.some(coefficients => coefficients.every(value => value === 0))) return null;
+  const poles = distanceProduct(polynomials[0], point);
+  const zeros = distanceProduct(polynomials[1], point);
+  const gain = poles.magnitude / zeros.magnitude;
+  const angle = poles.angle - zeros.angle;
+  const hasZeroDistance = [...poles.vectors, ...zeros.vectors].some(vector => vector.distance === 0);
+  return {
+    poles, zeros,
+    coefficientRatio: Math.abs(polynomials[0][0] / polynomials[1][0]),
+    phaseOffset: (polynomials[0][0] < 0 ? 180 : 0) - (polynomials[1][0] < 0 ? 180 : 0),
+    gain: Number.isFinite(gain) ? gain : null,
+    phase: hasZeroDistance ? null : Math.atan2(Math.sin(angle), Math.cos(angle)) * 180 / Math.PI,
+    angleSatisfied: !hasZeroDistance && Math.cos(angle) < 0 && Math.abs(Math.sin(angle)) <= tolerance,
+  };
 }
 
 export function checkRootLocusPoint(system: TransferFunction, point: Complex): RootLocusCheck {

@@ -16,7 +16,7 @@ try {
   const { Analyzer } = require(join(buildDirectory, 'analyzer.js'));
   const { TransferFunctionParser: parser } = require(join(buildDirectory, 'parser.js'));
   const { analyzeSymbolicRouth, solveGainConditions, symbolicTransferLatex } = require(join(buildDirectory, 'symbolicRouth.js'));
-  const { checkRootLocusPoint } = require(join(buildDirectory, 'rootLocusCheck.js'));
+  const { checkRootLocusPoint, rootLocusDistances } = require(join(buildDirectory, 'rootLocusCheck.js'));
   const { calculateRootLocus, rootLocusCharacteristic, rootLocusPoles, rootLocusGain } = require(join(buildDirectory, 'rootLocus.js'));
   for (const maximum of [0.001, 100, 1e6]) {
     assert.equal(rootLocusGain(0, maximum), 0);
@@ -64,6 +64,28 @@ try {
   assertPointGains(checkPoint('K/(s^2+K*s+1)', -1, Math.sqrt(2)), [2]); // K in the denominator: A(s)+K B(s).
   assert.equal(checkPoint('K*(s+1)-1', 0, 0).belongs, false); // K=0 makes the whole characteristic zero.
   assert.equal(checkPoint('K*(s+3)/(s*(s+2))', -3, 0).belongs, false); // A zero needs infinite gain.
+  const distances = (expression, re, im) => rootLocusDistances({ ...locusSystem, rawExpression: expression }, { re, im });
+  const construction = distances('1/(s*(s+2))', -1, 1);
+  assert.deepEqual(construction.poles.vectors.map(({ origin }) => ({ re: origin.re || 0, im: origin.im || 0 })), [{ re: -2, im: 0 }, { re: 0, im: 0 }]);
+  assert.ok(construction.poles.vectors.every(vector => Math.abs(vector.distance - Math.sqrt(2)) < 1e-12));
+  assert.ok(Math.abs(construction.gain - 2) < 1e-12);
+  assert.ok(Math.abs(construction.phase - 180) < 1e-12);
+  assert.equal(construction.angleSatisfied, true);
+  assert.equal(construction.zeros.vectors.length, 0);
+  const withZero = distances('2*K*(s+3)/(s*(s+2))', -1, 0);
+  assert.equal(withZero.coefficientRatio, 0.5);
+  assert.deepEqual(withZero.zeros.vectors[0].origin, { re: -3, im: 0 });
+  assert.equal(withZero.zeros.vectors[0].distance, 2);
+  assert.equal(withZero.gain, 0.25);
+  assert.equal(distances('1/(s*(s+2))', -0.5, 1).angleSatisfied, false);
+  assert.equal(distances('-2*K/(s+1)', 0, 0).angleSatisfied, true);
+  assert.equal(distances('-2*K/(s+1)', 0, 0).phaseOffset, -180);
+  assert.equal(distances('K/(s+1)', -1, 0).phase, null);
+  assert.equal(distances('K/(s+1)', -1, 0).gain, 0);
+  assert.equal(distances('K*(s+3)/(s*(s+2))', -3, 0).gain, null);
+  assert.equal(distances('K^2/(s+1)', -5, 0), null);
+  assert.equal(distances('K*(s+1)-1', 0, 0), null);
+  assert.throws(() => distances('1/(s+1)', Infinity, 0));
   const feedbackPreview = { ...locusSystem, rawExpression: 'K/(s*(s+2))', unityFeedback: true, kValue: 3 };
   assert.ok(symbolicTransferLatex(feedbackPreview).includes('K'));
   assert.equal(symbolicTransferLatex(feedbackPreview), symbolicTransferLatex({ ...feedbackPreview, kValue: 10 }));

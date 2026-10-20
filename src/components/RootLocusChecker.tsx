@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Complex, TransferFunction } from '../core/types';
 import { ComplexMath } from '../core/complex';
-import { checkRootLocusPoint } from '../core/rootLocusCheck';
+import { checkRootLocusPoint, rootLocusDistances } from '../core/rootLocusCheck';
+import { RootLocusDistancePlot } from './RootLocusDistancePlot';
 
 export const RootLocusChecker: React.FC<{
   systems: TransferFunction[];
@@ -13,9 +14,9 @@ export const RootLocusChecker: React.FC<{
   const [inputError, setInputError] = useState('');
   const results = useMemo(() => point ? systems.filter(system => system.visible && system.analysis).map(system => {
     try {
-      return { system, result: checkRootLocusPoint(system, point), error: null };
+      return { system, result: checkRootLocusPoint(system, point), geometry: rootLocusDistances(system, point), error: null };
     } catch (error) {
-      return { system, result: null, error: error instanceof Error ? error.message : 'Não foi possível verificar.' };
+      return { system, result: null, geometry: null, error: error instanceof Error ? error.message : 'Não foi possível verificar.' };
     }
   }) : [], [systems, point]);
 
@@ -49,7 +50,7 @@ export const RootLocusChecker: React.FC<{
     <div role="status" aria-live="polite" className="space-y-1.5">
       {inputError && <p className="text-rose-600 dark:text-rose-400">{inputError}</p>}
       {point && <p className="font-mono">s = {ComplexMath.format(point, 6)}</p>}
-      {results.map(({ system, result, error }) => <div key={system.id} className="rounded border border-slate-200 dark:border-slate-700 p-2">
+      {results.map(({ system, result, geometry, error }) => <div key={system.id} className="rounded border border-slate-200 dark:border-slate-700 p-2">
         <span className="font-semibold">{system.name}: </span>
         {error ? <span className="text-rose-600 dark:text-rose-400">{error}</span>
           : result?.allGains ? <span>Pertence ao LGR para todo K ≥ 0 em que a planta e a equação característica estejam definidas (polo fixo).</span>
@@ -61,6 +62,12 @@ export const RootLocusChecker: React.FC<{
                 className="rounded border border-cyan-400/50 px-1.5 py-0.5 text-cyan-700 dark:text-cyan-300">Mostrar este K</button>}
             </span>)}
           </> : <span>Não pertence ao LGR para K ≥ 0.</span>}
+        {point && geometry && <RootLocusDistancePlot point={point} geometry={geometry} onPointChange={next => {
+          setReal(String(next.re));
+          setImaginary(String(next.im));
+          setPoint(next);
+        }} />}
+        {result && !geometry && <p className="mt-2 text-slate-500 dark:text-slate-400">A construção geométrica requer a forma A(s) + K B(s), com A e B não nulos. A verificação acima usa a equação característica.</p>}
       </div>)}
       {point && results.length === 0 && <p>Adicione ou exiba um sistema válido para verificar a coordenada.</p>}
     </div>
