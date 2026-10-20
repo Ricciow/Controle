@@ -37,6 +37,11 @@ export const RootLocusDistancePlot: React.FC<{
   const magnitudeFormula = `M = \\left|\\frac{B(s)}{A(s)}\\right| = ${format(1 / geometry.coefficientRatio)} \\cdot \\frac{${product(geometry.zeros.vectors)}}{${product(geometry.poles.vectors)}}`;
   const magnitudeValue = geometry.magnitude === null ? '\\quad\\text{indefinido}'
     : Number.isFinite(geometry.magnitude) ? ` \\approx ${format(geometry.magnitude)}` : ' \\to \\infty';
+  const poleAngleSum = degrees(geometry.poles.vectors.reduce((sum, vector) => sum + vector.angle, 0));
+  const zeroAngleSum = degrees(geometry.zeros.vectors.reduce((sum, vector) => sum + vector.angle, 0));
+  const angleSum = (items: typeof geometry.poles.vectors, total: number) =>
+    items.some(vector => vector.distance === 0) ? 'Indefinida: s coincide com uma origem.'
+      : `${items.map(vector => `(${format(degrees(vector.angle))}°)`).join(' + ') || '0°'} = ${format(total)}°`;
 
   return <div className="mt-3 space-y-3 text-slate-700 dark:text-slate-300">
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -119,9 +124,12 @@ export const RootLocusDistancePlot: React.FC<{
       <div className="overflow-x-auto py-1"><MathView math={`${gainFormula}${geometry.gain === null ? '\\quad\\text{indefinido}' : ` \\approx ${format(geometry.gain)}`}`} /></div>
       <p>M é o módulo da malha aberta sem K. Para M finito e positivo, K = 1/M.</p>
       <p>Produtos sem fatores valem 1. O fator inicial corrige os coeficientes líderes.</p>
+      <p>Σ ângulos dos polos: {angleSum(geometry.poles.vectors, poleAngleSum)}</p>
+      <p>Σ ângulos dos zeros: {angleSum(geometry.zeros.vectors, zeroAngleSum)}</p>
       {geometry.phase === null ? <p>Ângulo indefinido: s coincide com um polo ou zero. Use o resultado da verificação para esse caso.</p>
         : <p className={geometry.angleSatisfied ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}>
-          Σ ângulos dos polos − Σ ângulos dos zeros + {geometry.phaseOffset}° = {format(geometry.phase)}° (módulo 360°).
+          Σ polos − Σ zeros + correção dos coeficientes: {format(poleAngleSum)}° − ({format(zeroAngleSum)}°) + ({geometry.phaseOffset}°)
+          {' '}= {format(poleAngleSum - zeroAngleSum + geometry.phaseOffset)}° ≡ {format(geometry.phase)}° (módulo 360°).
           {' '}{geometry.angleSatisfied ? 'Condição angular satisfeita' : 'Condição angular não satisfeita'}: deve ser ±180°.
         </p>}
       <p className="text-[11px] text-slate-500 dark:text-slate-400">A razão das distâncias fornece o módulo de K; o ponto pertence ao LGR somente quando a condição angular e a equação característica também são satisfeitas.</p>
