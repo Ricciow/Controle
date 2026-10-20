@@ -1,16 +1,30 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Target, Compass } from 'lucide-react';
 import { TransferFunction } from '../core/types';
+import { Frequency } from '../core/frequency';
+import { axisTicks } from '../core/timePlot';
+import { PlotControls } from './PlotControls';
+import { usePlotDrag } from './usePlotDrag';
 
 interface NyquistPlotProps {
   systems: TransferFunction[];
 }
 
 export const NyquistPlot: React.FC<NyquistPlotProps> = ({ systems }) => {
-  const activeSystems = useMemo(
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [frequencyRange, setFrequencyRange] = useState<[number, number] | null>(null);
+  const baseSystems = useMemo(
     () => systems.filter(s => s.visible && s.analysis?.nyquist && s.analysis.nyquist.length > 0),
     [systems]
   );
+  const activeSystems = useMemo(() => baseSystems.map(system => frequencyRange ? {
+    ...system, analysis: { ...system.analysis!, ...Frequency.calculateFrequencyResponse(system.numerator, system.denominator,
+      system.analysis!.poles, system.analysis!.zeros, frequencyRange) },
+  } : system), [baseSystems, frequencyRange]);
+  const minFrequency = frequencyRange?.[0] ?? Math.min(0.1, ...baseSystems.map(system => system.analysis!.bode.w[0]));
+  const maxFrequency = frequencyRange?.[1] ?? Math.max(100, ...baseSystems.map(system => system.analysis!.bode.w.at(-1)!));
 
   // Compute bounding box around (-1, 0) and curves
   const bounds = useMemo(() => {
@@ -21,19 +35,27 @@ export const NyquistPlot: React.FC<NyquistPlotProps> = ({ systems }) => {
         if (isFinite(pt.re) && isFinite(pt.im)) {
           const absRe = Math.abs(pt.re);
           const absIm = Math.abs(pt.im);
-          if (absRe < 100 && absRe > maxVal) maxVal = absRe;
-          if (absIm < 100 && absIm > maxVal) maxVal = absIm;
+          if (absRe > maxVal) maxVal = absRe;
+          if (absIm > maxVal) maxVal = absIm;
         }
       });
     });
-    return Math.min(25, Math.max(2.5, Math.ceil(maxVal * 1.25)));
+    return Math.max(2.5, maxVal * 1.25);
   }, [activeSystems]);
 
   const width = 600;
   const height = 450;
-  const cx = width / 2;
-  const cy = height / 2;
-  const scale = (Math.min(width, height) * 0.42) / bounds;
+  const cx = width / 2 + pan.x;
+  const cy = height / 2 + pan.y;
+  const scale = (Math.min(width, height) * 0.42) / bounds * zoom;
+  const changeZoom = (factor: number) => {
+    const next = zoom / factor;
+    if (!Number.isFinite(next) || next <= 0 || !Number.isFinite(bounds / next) || bounds / next === 0) return;
+    setZoom(next);
+    setPan(current => ({ x: current.x / factor, y: current.y / factor }));
+  };
+  const move = (dx: number, dy: number) => setPan(current => ({ x: current.x + dx, y: current.y + dy }));
+  const drag = usePlotDrag(svgRef, move, changeZoom);
 
   const toSvg = (re: number, im: number) => ({
     x: cx + re * scale,
@@ -45,13 +67,15 @@ export const NyquistPlot: React.FC<NyquistPlotProps> = ({ systems }) => {
   return (
     <div className="flex flex-col h-full bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
       {/* Top Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 flex-shrink-0">
+      <div className="flex flex-wrap gap-2 items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Compass className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
           <h3 className="font-semibold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-100">
             Diagrama de Nyquist (Plano Polar Re x Im)
           </h3>
         </div>
+
+        <PlotControls onZoom={changeZoom} onPan={(dx, dy) => move(dx * width, dy * height)} onReset={() => { setZoom(1); setPan({ x: 0, y: 0 }); setFrequencyRange(null); }} />
 
         <div className="flex items-center gap-2 text-xs">
           <div className="flex items-center gap-1.5 px-2 py-0.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-md text-rose-600 dark:text-rose-400 font-medium text-[11px]">
@@ -60,10 +84,25 @@ export const NyquistPlot: React.FC<NyquistPlotProps> = ({ systems }) => {
           </div>
         </div>
       </div>
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 px-4 py-1.5 text-xs">
+        <span className="font-mono">ω: {minFrequency.toExponential(1)}–{maxFrequency.toExponential(1)} rad/s</span>
+        <button type="button" className="rounded bg-cyan-600 px-2 py-1 text-white" onClick={() => {
+          const next: [number, number] = [minFrequency / 10, maxFrequency * 10];
+          if (next.every(Number.isFinite) && next[0] > 0) setFrequencyRange(next);
+        }}>Mais curva</button>
+      </div>
 
       {/* SVG Canvas */}
       <div className="relative flex-1 bg-slate-50/50 dark:bg-slate-950 select-none overflow-hidden min-h-0">
-        <svg className="w-full h-full" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
+        <svg ref={svgRef} {...drag} role="img" aria-label="Diagrama de Nyquist" className="w-full h-full touch-none cursor-grab active:cursor-grabbing" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
+          {axisTicks(-cx / scale, (width - cx) / scale, 7).map(value => <g key={`x${value}`}>
+            <line x1={cx + value * scale} x2={cx + value * scale} y1="0" y2={height} className="stroke-slate-200 dark:stroke-slate-800" strokeDasharray="3 3" />
+            <text x={cx + value * scale} y={Math.max(14, Math.min(height - 5, cy + 14))} fill="#64748b" fontSize="10" textAnchor="middle">{Number(value.toPrecision(5))}</text>
+          </g>)}
+          {axisTicks((cy - height) / scale, cy / scale, 6).map(value => <g key={`y${value}`}>
+            <line x1="0" x2={width} y1={cy - value * scale} y2={cy - value * scale} className="stroke-slate-200 dark:stroke-slate-800" strokeDasharray="3 3" />
+            <text x={Math.max(6, Math.min(width - 55, cx + 6))} y={cy - value * scale - 3} fill="#64748b" fontSize="10">{Number(value.toPrecision(5))}j</text>
+          </g>)}
           {/* Unit Circle */}
           <circle
             cx={cx}
@@ -106,20 +145,22 @@ export const NyquistPlot: React.FC<NyquistPlotProps> = ({ systems }) => {
             let dPos = '';
             // Mirrored Path (w < 0)
             let dNeg = '';
+            let connected = false;
 
             for (let i = 0; i < pts.length; i++) {
               const p = pts[i];
-              if (!isFinite(p.re) || !isFinite(p.im)) continue;
+              if (!isFinite(p.re) || !isFinite(p.im)) { connected = false; continue; }
               const posPt = toSvg(p.re, p.im);
               const negPt = toSvg(p.re, -p.im);
 
-              if (dPos === '') {
+              if (!connected) {
                 dPos += `M ${posPt.x} ${posPt.y}`;
                 dNeg += `M ${negPt.x} ${negPt.y}`;
               } else {
                 dPos += ` L ${posPt.x} ${posPt.y}`;
                 dNeg += ` L ${negPt.x} ${negPt.y}`;
               }
+              connected = true;
             }
 
             return (
@@ -135,7 +176,7 @@ export const NyquistPlot: React.FC<NyquistPlotProps> = ({ systems }) => {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-4 py-2 bg-slate-50/80 dark:bg-slate-950/80 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 flex-shrink-0">
+      <div className="flex flex-wrap gap-2 items-center justify-between px-4 py-2 bg-slate-50/80 dark:bg-slate-950/80 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 flex-shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <div className="w-4 h-0.5 bg-cyan-600 dark:bg-cyan-400" />
@@ -147,7 +188,7 @@ export const NyquistPlot: React.FC<NyquistPlotProps> = ({ systems }) => {
           </div>
         </div>
         <div className="text-[11px] text-slate-500">
-          <span>Critério de Estabilidade de Nyquist</span>
+          <span>Arraste · Ctrl + rolagem</span>
         </div>
       </div>
     </div>

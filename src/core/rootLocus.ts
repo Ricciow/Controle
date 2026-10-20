@@ -47,12 +47,12 @@ function findPoles(coefficients: number[]): Complex[] {
 export function rootLocusGain(progress: number, maxGain: number): number {
   if (progress <= 0) return 0;
   if (progress >= 1) return maxGain;
-  return maxGain * Math.expm1(progress * Math.log(1001)) / 1000;
+  return maxGain * (Math.expm1(progress * Math.log(1001)) / 1000);
 }
 
 export function calculateRootLocus(system: TransferFunction, maxGain: number, selectedGain?: number): RootLocusData {
-  if (!Number.isFinite(maxGain) || maxGain <= 0 || maxGain > 1e6) {
-    throw new Error('K máximo deve estar entre 0 e 1.000.000.');
+  if (!Number.isFinite(maxGain) || maxGain <= 0) {
+    throw new Error('K máximo deve ser positivo e finito.');
   }
   if (selectedGain !== undefined && selectedGain > maxGain) throw new Error('K selecionado deve estar dentro da faixa.');
   const selectedPoles = selectedGain === undefined ? [] : rootLocusPoles(system, selectedGain);

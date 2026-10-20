@@ -2,9 +2,8 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Activity, ChevronLeft, ChevronRight, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { TransferFunction } from '../core/types';
 import { Simulation } from '../core/simulation';
-import { axisTicks, plotBounds, responseAt, responseDetails } from '../core/timePlot';
-
-const MAX_TIME_SCALE = 32;
+import { axisTicks, panRange, plotBounds, responseAt, responseDetails, zoomRange } from '../core/timePlot';
+import { usePlotDrag } from './usePlotDrag';
 
 const format = (value: number | null, digits = 3) => {
   if (value === null || !Number.isFinite(value)) return '—';
@@ -17,6 +16,7 @@ export const StepResponsePlot: React.FC<{ systems: TransferFunction[] }> = ({ sy
   const [guides, setGuides] = useState(true);
   const [selectedId, setSelectedId] = useState('');
   const [window, setWindow] = useState<[number, number]>([0, 1]);
+  const [yWindow, setYWindow] = useState<[number, number] | null>(null);
   const [cursor, setCursor] = useState<number | null>(null);
   const [dimensions, setDimensions] = useState({ width: 600, height: 300 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,22 +39,19 @@ export const StepResponsePlot: React.FC<{ systems: TransferFunction[] }> = ({ sy
   const start = window[0] * maxTime;
   const end = window[1] * maxTime;
   const responses = useMemo(() => active.map(system => {
-    const analysis = system.analysis!;
-    const result = end > (analysis.stepResponse.t.at(-1) ?? 0)
-      ? Simulation.simulateTimeDomain(system.numerator, system.denominator, analysis.poles, end)
-      : analysis;
+    const result = Simulation.simulateTimeDomain(system.numerator, system.denominator, system.analysis!.poles, end, start);
     return { system, result };
-  }), [active, end]);
+  }), [active, start, end]);
   const curves = useMemo(() => responses.map(({ system, result }) => ({ system, simulation: responseType === 'step' ? result.stepResponse : result.impulseResponse })), [responses, responseType]);
   const isStable = selected?.analysis?.stability === 'STABLE';
   const finalValue = isStable && selected && selected.denominator[selected.denominator.length - 1] !== 0
     ? selected.numerator[selected.numerator.length - 1] / selected.denominator[selected.denominator.length - 1] : null;
-  const selectedStep = responses.find(({ system }) => system.id === selected?.id)?.result.stepResponse;
+  const selectedStep = selected?.analysis?.stepResponse;
   const details = useMemo(() => finalValue !== null && selectedStep ? responseDetails(selectedStep, finalValue) : null, [selectedStep, finalValue]);
   const showGuides = guides && responseType === 'step' && finalValue !== null && Number.isFinite(finalValue);
   const band = Math.abs(finalValue ?? 0) * 0.02;
   const references = responseType === 'step' ? [1, ...(showGuides ? [finalValue! - band, finalValue! + band] : [])] : [];
-  const [minY, maxY] = plotBounds(curves.map(curve => curve.simulation), start, end, references);
+  const [minY, maxY] = yWindow ?? plotBounds(curves.map(curve => curve.simulation), start, end, references);
   const { width, height } = dimensions;
   const padding = { left: width < 420 ? 54 : 64, right: 18, top: 24, bottom: 44 };
   const plotWidth = width - padding.left - padding.right;
@@ -66,19 +63,21 @@ export const StepResponsePlot: React.FC<{ systems: TransferFunction[] }> = ({ sy
   const time = cursor === null ? null : start + cursor * (end - start);
 
   const zoom = (factor: number) => {
-    const span = Math.min(MAX_TIME_SCALE, Math.max(1 / 64, (window[1] - window[0]) * factor));
-    const center = time !== null ? time / maxTime : (window[0] + window[1]) / 2;
-    const left = Math.max(0, Math.min(MAX_TIME_SCALE - span, center - span / 2));
-    setWindow([left, left + span]);
+    setWindow(current => zoomRange(current, factor, cursor ?? 0.5, 0));
+    setYWindow(current => current ? zoomRange(current, factor) : null);
     setCursor(null);
   };
   const pan = (direction: number) => {
     const span = window[1] - window[0];
-    const left = Math.max(0, Math.min(MAX_TIME_SCALE - span, window[0] + direction * span * 0.5));
-    setWindow([left, left + span]);
+    setWindow(current => panRange(current, direction * span * 0.5, 0));
     setCursor(null);
   };
-  const reset = () => { setWindow([0, 1]); setCursor(null); };
+  const reset = () => { setWindow([0, 1]); setYWindow(null); setCursor(null); };
+  const drag = usePlotDrag(svgRef, (dx, dy) => {
+    setWindow(current => panRange(current, -dx / plotWidth * (current[1] - current[0]), 0));
+    if (dy !== 0) setYWindow(current => panRange(current ?? [minY, maxY], dy / plotHeight * (maxY - minY)));
+    setCursor(null);
+  }, zoom);
   const trackPointer = (event: React.PointerEvent<SVGSVGElement>) => {
     const matrix = svgRef.current?.getScreenCTM();
     if (!matrix) return;
@@ -116,20 +115,23 @@ export const StepResponsePlot: React.FC<{ systems: TransferFunction[] }> = ({ sy
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-1 px-3 py-1.5 bg-slate-50 dark:bg-slate-950/50 border-b border-slate-200 dark:border-slate-800 flex-shrink-0">
-        <div className="flex items-center gap-1 text-xs">
-          <button type="button" title="Aumentar zoom" aria-label="Aumentar zoom" className={controlClass} onClick={() => zoom(0.5)} disabled={window[1] - window[0] <= 1 / 64}><ZoomIn className="w-4 h-4" /></button>
-          <button type="button" title="Reduzir zoom" aria-label="Reduzir zoom" className={controlClass} onClick={() => zoom(2)} disabled={window[1] - window[0] >= MAX_TIME_SCALE}><ZoomOut className="w-4 h-4" /></button>
+        <div className="flex flex-wrap items-center gap-1 text-xs">
+          <button type="button" title="Aumentar zoom" aria-label="Aumentar zoom" className={controlClass} onClick={() => zoom(0.5)}><ZoomIn className="w-4 h-4" /></button>
+          <button type="button" title="Reduzir zoom" aria-label="Reduzir zoom" className={controlClass} onClick={() => zoom(2)}><ZoomOut className="w-4 h-4" /></button>
           <button type="button" title="Ver trecho anterior" aria-label="Ver trecho anterior" className={controlClass} onClick={() => pan(-1)} disabled={window[0] <= 0}><ChevronLeft className="w-4 h-4" /></button>
-          <button type="button" title="Ver trecho seguinte" aria-label="Ver trecho seguinte" className={controlClass} onClick={() => pan(1)} disabled={window[1] >= MAX_TIME_SCALE}><ChevronRight className="w-4 h-4" /></button>
+          <button type="button" title="Ver trecho seguinte" aria-label="Ver trecho seguinte" className={controlClass} onClick={() => pan(1)}><ChevronRight className="w-4 h-4" /></button>
           <button type="button" title="Restaurar escala" aria-label="Restaurar escala" className={controlClass} onClick={reset}><RotateCcw className="w-3.5 h-3.5" /></button>
+          <button type="button" aria-label="Aumentar zoom da amplitude" className={controlClass} onClick={() => setYWindow(current => zoomRange(current ?? [minY, maxY], 0.5))}>Y+</button>
+          <button type="button" aria-label="Reduzir zoom da amplitude" className={controlClass} onClick={() => setYWindow(current => zoomRange(current ?? [minY, maxY], 2))}>Y−</button>
+          <button type="button" aria-pressed={yWindow === null} className={controlClass} onClick={() => setYWindow(null)}>Auto Y</button>
           <span className="ml-1 font-mono text-[10px] text-slate-500 dark:text-slate-400">{format(start)}–{format(end)} s</span>
         </div>
         {responseType === 'step' && <button type="button" aria-pressed={guides} onClick={() => setGuides(!guides)} className={`rounded-md px-2 py-1 text-[11px] font-medium ${guides ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300' : 'text-slate-500 dark:text-slate-400'}`}>Indicadores ±2%</button>}
       </div>
 
       <div ref={containerRef} className="relative flex-1 min-h-0 bg-slate-50/40 dark:bg-slate-950/70">
-        {active.length === 0 ? <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-slate-500">Adicione ou exiba uma função válida e própria para ver a resposta.</div> : <svg ref={svgRef} className="w-full h-full touch-pan-y" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${responseType === 'step' ? 'Resposta ao degrau' : 'Resposta ao impulso'} de ${active.map(system => system.name).join(', ')}, entre ${format(start)} e ${format(end)} segundos`}
-          tabIndex={0} onPointerMove={trackPointer} onPointerDown={trackPointer} onPointerLeave={() => setCursor(null)} onBlur={() => setCursor(null)}
+        {active.length === 0 ? <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-slate-500">Adicione ou exiba uma função válida e própria para ver a resposta.</div> : <svg ref={svgRef} className="w-full h-full touch-none" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${responseType === 'step' ? 'Resposta ao degrau' : 'Resposta ao impulso'} de ${active.map(system => system.name).join(', ')}, entre ${format(start)} e ${format(end)} segundos`}
+          {...drag} tabIndex={0} onPointerDown={event => { drag.onPointerDown(event); trackPointer(event); }} onPointerMove={event => { drag.onPointerMove(event); if (!event.buttons) trackPointer(event); }} onPointerLeave={() => setCursor(null)} onBlur={() => setCursor(null)}
           onKeyDown={event => {
             if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setCursor(Math.max(0, Math.min(1, (cursor ?? 0.5) + (event.key === 'ArrowRight' ? 0.02 : -0.02)))); }
             if (event.key === 'Escape') setCursor(null);
@@ -181,7 +183,7 @@ export const StepResponsePlot: React.FC<{ systems: TransferFunction[] }> = ({ sy
       </div>}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 dark:border-slate-800 px-4 py-2 text-[11px] flex-shrink-0">
         <div className="flex flex-wrap gap-x-3 gap-y-1">{active.map(system => <button key={system.id} type="button" aria-pressed={system.id === selected?.id} onClick={() => setSelectedId(system.id)} className={`flex items-center gap-1.5 ${system.id === selected?.id ? 'font-semibold text-slate-800 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}`} title={`Mostrar indicadores de ${system.name}`}><span className="w-2 h-2 rounded-full" style={{ backgroundColor: system.color }} />{system.name}</button>)}</div>
-        <span className="text-slate-500 dark:text-slate-400">{selected && !isStable ? 'Sem convergência para um valor final.' : 'Toque ou passe o mouse para ler a curva.'}</span>
+        <span className="text-slate-500 dark:text-slate-400">Arraste para mover · Ctrl + rolagem para zoom</span>
       </div>
     </section>
   );

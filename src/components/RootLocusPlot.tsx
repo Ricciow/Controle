@@ -57,16 +57,19 @@ export const RootLocusPlot: React.FC<{ systems: TransferFunction[] }> = ({ syste
       <p>Realimentação unitária negativa: D(s) + K N(s) = 0. Se a expressão contém K, varia-se esse parâmetro em D(s, K) + N(s, K) = 0.</p>
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2">K máximo
-          <input type="number" aria-label="K máximo do root locus" min="0.001" max="1000000" step="any" value={maxGain}
+          <input type="number" aria-label="K máximo do root locus" min="0.001" step="any" value={maxGain}
             onChange={event => {
               const value = event.target.valueAsNumber;
-              if (Number.isFinite(value) && value > 0 && value <= 1e6) {
+              if (Number.isFinite(value) && value > 0) {
                 setIsPlaying(false);
                 setMaxGain(value);
                 setGain(current => Math.min(current, value));
               }
             }} className="w-24 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 font-mono" />
         </label>
+        <button type="button" onClick={() => {
+          if (Number.isFinite(maxGain * 10)) { setIsPlaying(false); setMaxGain(maxGain * 10); }
+        }} className="rounded bg-cyan-600 px-2 py-1 text-white">Estender curva</button>
         <label className="flex items-center gap-2">K selecionado
           <input type="number" aria-label="K selecionado do root locus" min="0" max={maxGain} step="any" value={gain}
             onChange={event => {

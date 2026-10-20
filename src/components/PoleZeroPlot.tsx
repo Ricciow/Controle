@@ -1,8 +1,11 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { ZoomIn, ZoomOut, RotateCcw, Target, Info } from 'lucide-react';
+import { Target, Info } from 'lucide-react';
 import { TransferFunction, Complex } from '../core/types';
 import { ComplexMath } from '../core/complex';
 import { RootLocusData } from '../core/rootLocus';
+import { axisTicks } from '../core/timePlot';
+import { usePlotDrag } from './usePlotDrag';
+import { PlotControls } from './PlotControls';
 
 interface PoleZeroPlotProps {
   systems: TransferFunction[];
@@ -24,8 +27,6 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
   const svgRef = useRef<SVGSVGElement>(null);
   const [zoom, setZoom] = useState(1.0);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredRoot, setHoveredRoot] = useState<HoveredRoot | null>(null);
   
   // Damping lines and Wn circles disabled by default
@@ -71,15 +72,7 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
   };
 
   // Generate tick marks
-  const ticks = useMemo(() => {
-    const magnitude = 10 ** Math.floor(Math.log10(viewRange / 4));
-    const step = Math.ceil(viewRange / 4 / magnitude) * magnitude;
-    const list: number[] = [];
-    for (let v = step; v <= viewRange * 1.5; v += step) {
-      list.push(v);
-    }
-    return { step, list };
-  }, [viewRange]);
+  const ticks = useMemo(() => ({ list: axisTicks(0, viewRange, 6).filter(value => value > 0) }), [viewRange]);
 
   // Damping lines
   const zetaLines = [
@@ -91,68 +84,17 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
     { zeta: 0.9, angle: Math.acos(0.9) },
   ];
 
-  // Touch state for pan & pinch-zoom
-  const touchStateRef = useRef<{
-    lastX: number;
-    lastY: number;
-    lastDist: number | null;
-  } | null>(null);
-
-  // Mouse pan handlers
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+  const changeZoom = (factor: number) => {
+    const next = zoom / factor;
+    if (!Number.isFinite(next) || next <= 0 || !Number.isFinite(bounds / next) || bounds / next === 0) return;
+    setZoom(next);
+    setPan(current => ({ x: current.x / factor, y: current.y / factor }));
   };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDragging) {
-      setPan({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y
-      });
-    }
+  const move = (dx: number, dy: number) => {
+    setPan(current => ({ x: current.x + dx, y: current.y + dy }));
+    setHoveredRoot(null);
   };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  // Touch pan & pinch zoom handlers
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      const t = e.touches[0];
-      touchStateRef.current = {
-        lastX: t.clientX,
-        lastY: t.clientY,
-        lastDist: null
-      };
-    } else if (e.touches.length === 2) {
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
-      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-      touchStateRef.current = {
-        lastX: (t1.clientX + t2.clientX) / 2,
-        lastY: (t1.clientY + t2.clientY) / 2,
-        lastDist: dist
-      };
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStateRef.current) return;
-    if (e.touches.length === 2 && touchStateRef.current.lastDist !== null) {
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
-      const currentDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-      const factor = currentDist / touchStateRef.current.lastDist;
-      setZoom(prev => Math.max(0.2, Math.min(10, prev * factor)));
-      touchStateRef.current.lastDist = currentDist;
-    }
-  };
-
-  const handleTouchEnd = () => {
-    touchStateRef.current = null;
-  };
+  const drag = usePlotDrag(svgRef, move, changeZoom);
 
   const resetView = () => {
     setZoom(1.0);
@@ -191,7 +133,7 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
             onClick={() => setShowDampingLines(!showDampingLines)}
             className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${
@@ -218,27 +160,7 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
 
           <div className="h-3.5 w-px bg-slate-200 dark:bg-slate-800 mx-0.5" />
 
-          <button
-            onClick={() => setZoom(prev => Math.min(10, prev * 1.25))}
-            className="p-1 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
-            title="Aumentar Zoom"
-          >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => setZoom(prev => Math.max(0.2, prev / 1.25))}
-            className="p-1 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
-            title="Diminuir Zoom"
-          >
-            <ZoomOut className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={resetView}
-            className="p-1 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
-            title="Resetar Visualização"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </button>
+          <PlotControls onZoom={changeZoom} onPan={(dx, dy) => move(dx * width, dy * height)} onReset={resetView} />
         </div>
       </div>
 
@@ -247,60 +169,25 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
       {/* SVG Canvas Area */}
       <div 
         ref={containerRef}
-        className={`relative ${locus ? 'h-[360px] sm:h-[420px] shrink-0' : 'flex-1 min-h-0'} bg-slate-50/50 dark:bg-slate-950 cursor-crosshair select-none overflow-hidden touch-pan-y`}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        className={`relative ${locus ? 'h-[360px] sm:h-[420px] shrink-0' : 'flex-1 min-h-0'} bg-slate-50/50 dark:bg-slate-950 cursor-grab active:cursor-grabbing select-none overflow-hidden`}
       >
         <svg 
           ref={svgRef}
-          className="w-full h-full"
+          {...drag}
+          role="img" aria-label={locus ? 'Lugar das raízes' : 'Polos e zeros'}
+          className="w-full h-full touch-none"
           viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="xMidYMid meet"
         >
           {/* Grid lines & Ticks */}
-          {ticks.list.map(v => {
-            const posRight = cx + v * scale;
-            const posLeft = cx - v * scale;
-            const posTop = cy - v * scale;
-            const posBottom = cy + v * scale;
-
-            return (
-              <g key={v} stroke="#cbd5e1" strokeWidth="0.7" strokeDasharray="3 3" className="dark:stroke-slate-800">
-                {posRight < width && <line x1={posRight} y1={0} x2={posRight} y2={height} />}
-                {posLeft > 0 && <line x1={posLeft} y1={0} x2={posLeft} y2={height} />}
-                {posTop > 0 && <line x1={0} y1={posTop} x2={width} y2={posTop} />}
-                {posBottom < height && <line x1={0} y1={posBottom} x2={width} y2={posBottom} />}
-
-                {/* Tick Labels */}
-                {posRight < width && (
-                  <text x={posRight} y={cy + 14} fill="#64748b" fontSize="10" textAnchor="middle" className="font-mono select-none">
-                    +{v}
-                  </text>
-                )}
-                {posLeft > 0 && (
-                  <text x={posLeft} y={cy + 14} fill="#64748b" fontSize="10" textAnchor="middle" className="font-mono select-none">
-                    -{v}
-                  </text>
-                )}
-                {posTop > 0 && (
-                  <text x={cx + 6} y={posTop + 3} fill="#64748b" fontSize="10" textAnchor="start" className="font-mono select-none">
-                    +{v}j
-                  </text>
-                )}
-                {posBottom < height && (
-                  <text x={cx + 6} y={posBottom + 3} fill="#64748b" fontSize="10" textAnchor="start" className="font-mono select-none">
-                    -{v}j
-                  </text>
-                )}
-              </g>
-            );
-          })}
-
+          {axisTicks(-cx / scale, (width - cx) / scale, 7).map(value => <g key={`x${value}`}>
+            <line x1={cx + value * scale} x2={cx + value * scale} y1="0" y2={height} className="stroke-slate-200 dark:stroke-slate-800" strokeDasharray="3 3" />
+            <text x={cx + value * scale} y={Math.max(14, Math.min(height - 5, cy + 14))} fill="#64748b" fontSize="10" textAnchor="middle">{Number(value.toPrecision(5))}</text>
+          </g>)}
+          {axisTicks((cy - height) / scale, cy / scale, 6).map(value => <g key={`y${value}`}>
+            <line x1="0" x2={width} y1={cy - value * scale} y2={cy - value * scale} className="stroke-slate-200 dark:stroke-slate-800" strokeDasharray="3 3" />
+            <text x={Math.max(6, Math.min(width - 55, cx + 6))} y={cy - value * scale - 3} fill="#64748b" fontSize="10">{Number(value.toPrecision(5))}j</text>
+          </g>)}
           {/* Concentric wn circles */}
           {showWnCircles && ticks.list.map(v => {
             const r = v * scale;
@@ -535,7 +422,7 @@ export const PoleZeroPlot: React.FC<PoleZeroPlotProps> = ({ systems, locus, cont
         {locus && <span>● Polos no K selecionado • Curvas: 0 ≤ K ≤ K máximo</span>}
         <div className="flex items-center gap-1 text-[11px] text-slate-500">
           <Info className="w-3.5 h-3.5 text-slate-400" />
-          <span>Arraste com o mouse para mover • Use +/− para zoom • Role para navegar na página</span>
+          <span>Arraste para mover · Ctrl + rolagem para zoom</span>
         </div>
       </div>
     </div>

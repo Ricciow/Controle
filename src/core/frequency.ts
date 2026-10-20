@@ -7,7 +7,8 @@ export const Frequency = {
     numerator: number[],
     denominator: number[],
     poles: Complex[],
-    zeros: Complex[]
+    zeros: Complex[],
+    frequencyRange?: [number, number]
   ): {
     bode: BodeData;
     nyquist: NyquistPoint[];
@@ -43,8 +44,13 @@ export const Frequency = {
       minFreq = minFreq / 10;
       maxFreq = maxFreq * 10;
     }
+    const phaseReference = minFreq;
+    if (frequencyRange) {
+      [minFreq, maxFreq] = frequencyRange;
+      if (![minFreq, maxFreq].every(Number.isFinite) || minFreq <= 0 || maxFreq <= minFreq) throw new Error('Faixa de frequência inválida.');
+    }
 
-    const numPoints = 500;
+    const numPoints = frequencyRange ? Math.min(6400, Math.max(500, Math.ceil((Math.log10(maxFreq) - Math.log10(minFreq)) * 100) + 1)) : 500;
     const logMin = Math.log10(minFreq);
     const logMax = Math.log10(maxFreq);
     const logStep = (logMax - logMin) / (numPoints - 1);
@@ -66,25 +72,28 @@ export const Frequency = {
       const denVal = ComplexMath.evalPoly(den, jw);
       const hJw = ComplexMath.div(numVal, denVal);
 
-      let mag = ComplexMath.mag(hJw);
-      if (isNaN(mag) || !isFinite(mag)) {
-        mag = 1e-12;
-      }
-      const magDb = 20 * Math.log10(Math.max(1e-9, mag));
+      const mag = ComplexMath.mag(hJw);
+      const magDb = Number.isFinite(mag) && mag > 0 ? 20 * Math.log10(mag) : NaN;
       magDbArr.push(magDb);
 
       const phase = ComplexMath.phase(hJw);
       rawPhaseArr.push(phase);
 
       nyquistArr.push({
-        re: isFinite(hJw.re) ? hJw.re : 0,
-        im: isFinite(hJw.im) ? hJw.im : 0,
+        re: Number.isFinite(hJw.re) ? hJw.re : NaN,
+        im: Number.isFinite(hJw.im) ? hJw.im : NaN,
         w
       });
     }
 
     // Phase unwrapping (in radians then convert to degrees)
-    let cumulativeOffset = 0;
+    const factorPhase = (frequency: number) => zeros.reduce((sum, root) => sum + Math.atan2(frequency - root.im, -root.re), 0)
+      - poles.reduce((sum, root) => sum + Math.atan2(frequency - root.im, -root.re), 0);
+    const reference = { re: 0, im: phaseReference };
+    const referencePhase = ComplexMath.phase(ComplexMath.div(ComplexMath.evalPoly(num, reference), ComplexMath.evalPoly(den, reference)));
+    const expectedPhase = referencePhase + factorPhase(minFreq) - factorPhase(phaseReference);
+    let cumulativeOffset = frequencyRange && Number.isFinite(expectedPhase) && Number.isFinite(rawPhaseArr[0])
+      ? 2 * Math.PI * Math.round((expectedPhase - rawPhaseArr[0]) / (2 * Math.PI)) : 0;
     for (let i = 0; i < rawPhaseArr.length; i++) {
       if (i > 0) {
         const diff = rawPhaseArr[i] - rawPhaseArr[i - 1];

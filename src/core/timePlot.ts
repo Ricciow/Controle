@@ -1,5 +1,19 @@
 import { SimulationResult } from './types';
 
+export function panRange(range: [number, number], offset: number, minimum = -Infinity): [number, number] {
+  const span = range[1] - range[0];
+  const left = Math.max(minimum, range[0] + offset);
+  const right = left + span;
+  return Number.isFinite(left) && Number.isFinite(right) && right > left ? [left, right] : range;
+}
+
+export function zoomRange(range: [number, number], factor: number, anchor = 0.5, minimum = -Infinity): [number, number] {
+  const span = (range[1] - range[0]) * factor;
+  const left = Math.max(minimum, range[0] + (range[1] - range[0] - span) * anchor);
+  const right = left + span;
+  return factor > 0 && Number.isFinite(left) && Number.isFinite(right) && right > left ? [left, right] : range;
+}
+
 export function responseAt(simulation: SimulationResult, time: number): number | null {
   const { t, y } = simulation;
   if (!t.length || time < t[0] || time > t[t.length - 1]) return null;

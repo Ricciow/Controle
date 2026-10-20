@@ -2,6 +2,26 @@ import { Complex, SimulationResult, SystemMetrics, StabilityStatus } from './typ
 import { Polynomial } from './polynomial';
 import { responseDetails } from './timePlot';
 
+// Scaling and squaring avoids integrating from t=0 every time the view moves.
+function transitionMatrix(matrix: number[][], time: number): number[][] {
+  const n = matrix.length;
+  const identity = (): number[][] => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => i === j ? 1 : 0));
+  const multiply = (a: number[][], b: number[][]) => a.map(row => row.map((_, j) => row.reduce((sum, value, k) => sum + value * b[k][j], 0)));
+  const norm = Math.max(...matrix.map(row => row.reduce((sum, value) => sum + Math.abs(value), 0))) * time;
+  if (!Number.isFinite(norm)) return matrix.map(row => row.map(() => NaN));
+  const squarings = Math.max(0, Math.ceil(Math.log2(norm || 1)));
+  const scaled = matrix.map(row => row.map(value => value * (time * 2 ** -squarings)));
+  let result = identity();
+  let term = identity();
+  for (let k = 1; k <= 40; k++) {
+    term = multiply(term, scaled).map(row => row.map(value => value / k));
+    result = result.map((row, i) => row.map((value, j) => value + term[i][j]));
+    if (Math.max(...term.flat().map(Math.abs)) < 1e-16) break;
+  }
+  for (let i = 0; i < squarings; i++) result = multiply(result, result);
+  return result;
+}
+
 export const Simulation = {
   getStability(poles: Complex[]): StabilityStatus {
     if (poles.length === 0) return 'STABLE';
@@ -38,13 +58,17 @@ export const Simulation = {
     numerator: number[],
     denominator: number[],
     poles: Complex[],
-    endTime?: number
+    endTime?: number,
+    startTime = 0
   ): {
     stepResponse: SimulationResult;
     impulseResponse: SimulationResult;
     metrics: SystemMetrics;
     isProper: boolean;
   } {
+    if (!Number.isFinite(startTime) || startTime < 0 || (endTime !== undefined && (!Number.isFinite(endTime) || endTime <= startTime))) {
+      throw new Error('Intervalo de tempo inválido.');
+    }
     const num = Polynomial.clean(numerator);
     const den = Polynomial.clean(denominator);
 
@@ -64,8 +88,8 @@ export const Simulation = {
     if (n === 0) {
       // Pure gain system: H(s) = K
       const gain = num[0] / den[0];
-      const duration = Number.isFinite(endTime) ? Math.max(4.95, endTime!) : 4.95;
-      const t = Array.from({ length: 100 }, (_, i) => i * duration / 99);
+      const duration = endTime ?? Math.max(4.95, startTime + 1);
+      const t = Array.from({ length: 100 }, (_, i) => startTime + i * (duration - startTime) / 99);
       return {
         stepResponse: { t, y: t.map(() => gain) },
         impulseResponse: { t, y: t.map((val) => (val === 0 ? gain * 100 : 0)) },
@@ -84,12 +108,9 @@ export const Simulation = {
     // Determine simulation time window T_final
     let tFinal = 5;
     let minStableRe = 0;
-    let maxFreq = 1;
 
     for (const p of poles) {
-      const mag = Math.hypot(p.re, p.im);
-      if (mag > maxFreq) maxFreq = mag;
-      if (p.re < -1e-5) {
+      if (p.re < 0) {
         if (minStableRe === 0 || Math.abs(p.re) < minStableRe) {
           minStableRe = Math.abs(p.re);
         }
@@ -100,7 +121,7 @@ export const Simulation = {
 
     if (stability === 'STABLE') {
       const tauDom = minStableRe > 0 ? 1 / minStableRe : 1;
-      tFinal = Math.max(1, Math.min(60, 6 * tauDom));
+      tFinal = 6 * tauDom;
     } else if (stability === 'MARGINALLY_STABLE') {
       const maxIm = Math.max(...poles.map(p => Math.abs(p.im)), 1);
       tFinal = Math.max(2, Math.min(40, (10 * 2 * Math.PI) / maxIm));
@@ -111,7 +132,7 @@ export const Simulation = {
     }
 
     const baseDuration = tFinal;
-    if (Number.isFinite(endTime)) tFinal = Math.max(tFinal, endTime!);
+    if (endTime !== undefined) tFinal = endTime;
 
     // Normalize denominator to monic
     const aLead = den[0];
@@ -129,12 +150,9 @@ export const Simulation = {
       beta[i] = bMonic[i + 1] - D * aMonic[i + 1];
     }
 
-    // RK4 Simulation
-    const numPoints = Math.min(6400, Math.max(400, Math.ceil(tFinal / baseDuration * 399) + 1));
-    const sampleDt = tFinal / (numPoints - 1);
-    // Preserve integration accuracy when extending the visible time horizon.
-    const substeps = Math.max(1, Math.ceil(sampleDt / Math.min(baseDuration / 399, 0.05 / maxFreq)));
-    const dt = sampleDt / substeps;
+    const duration = tFinal - startTime;
+    const numPoints = Math.min(6400, Math.max(400, Math.ceil(duration / baseDuration * 399) + 1));
+    const sampleDt = duration / (numPoints - 1);
     const tArr: number[] = [];
     const yStepArr: number[] = [];
     const yImpulseArr: number[] = [];
@@ -143,25 +161,15 @@ export const Simulation = {
     // Controllable canonical form:
     // dx1 = x2, ..., dx_{n-1} = xn
     // dxn = -a0*x1 - a1*x2 - ... - a_{n-1}*xn + u
-    let xStep = new Array(n).fill(0);
-    
-    // For impulse: initial state x(0+) = B = [0, 0, ..., 1]^T
-    let xImp = new Array(n).fill(0);
-    xImp[n - 1] = 1;
-
-    const fDeriv = (x: number[], u: number): number[] => {
-      const dx = new Array(n);
-      for (let i = 0; i < n - 1; i++) {
-        dx[i] = x[i + 1];
-      }
-      let sum = 0;
-      for (let i = 0; i < n; i++) {
-        // aMonic[n - i] is coefficient of s^i
-        sum += aMonic[n - i] * x[i];
-      }
-      dx[n - 1] = -sum + u;
-      return dx;
-    };
+    const stateMatrix = Array.from({ length: n + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i < n - 1; i++) stateMatrix[i][i + 1] = 1;
+    for (let i = 0; i < n; i++) stateMatrix[n - 1][i] = -aMonic[n - i];
+    stateMatrix[n - 1][n] = 1;
+    const initial = transitionMatrix(stateMatrix, startTime);
+    const advance = transitionMatrix(stateMatrix, sampleDt);
+    let xStep = initial.map(row => row[n]);
+    let xImp = initial.map(row => row[n - 1]);
+    const nextState = (state: number[]) => advance.map(row => row.reduce((sum, value, i) => sum + value * state[i], 0));
 
     const computeY = (x: number[], u: number): number => {
       let yVal = D * u;
@@ -173,49 +181,20 @@ export const Simulation = {
     };
 
     for (let step = 0; step < numPoints; step++) {
-      const curT = step * sampleDt;
+      const curT = step === numPoints - 1 ? tFinal : startTime + step * sampleDt;
       tArr.push(curT);
 
       // Output values
       const yS = computeY(xStep, 1);
       const yI = computeY(xImp, 0);
 
-      // Clamp runaway numbers for unstable systems to avoid NaN/Infinity crashes
-      yStepArr.push(Math.abs(yS) > 1e7 ? Math.sign(yS) * 1e7 : yS);
-      yImpulseArr.push(Math.abs(yI) > 1e7 ? Math.sign(yI) * 1e7 : yI);
-
-      if (step < numPoints - 1) {
-        for (let substep = 0; substep < substeps; substep++) {
-          // RK4 for Step
-          const k1_s = fDeriv(xStep, 1);
-          const xStep_k2 = xStep.map((xi, i) => xi + 0.5 * dt * k1_s[i]);
-          const k2_s = fDeriv(xStep_k2, 1);
-          const xStep_k3 = xStep.map((xi, i) => xi + 0.5 * dt * k2_s[i]);
-          const k3_s = fDeriv(xStep_k3, 1);
-          const xStep_k4 = xStep.map((xi, i) => xi + dt * k3_s[i]);
-          const k4_s = fDeriv(xStep_k4, 1);
-
-          for (let i = 0; i < n; i++) {
-            xStep[i] += (dt / 6) * (k1_s[i] + 2 * k2_s[i] + 2 * k3_s[i] + k4_s[i]);
-          }
-
-          // RK4 for Impulse (u=0 for t > 0)
-          const k1_i = fDeriv(xImp, 0);
-          const xImp_k2 = xImp.map((xi, i) => xi + 0.5 * dt * k1_i[i]);
-          const k2_i = fDeriv(xImp_k2, 0);
-          const xImp_k3 = xImp.map((xi, i) => xi + 0.5 * dt * k2_i[i]);
-          const k3_i = fDeriv(xImp_k3, 0);
-          const xImp_k4 = xImp.map((xi, i) => xi + dt * k3_i[i]);
-          const k4_i = fDeriv(xImp_k4, 0);
-
-          for (let i = 0; i < n; i++) {
-            xImp[i] += (dt / 6) * (k1_i[i] + 2 * k2_i[i] + 2 * k3_i[i] + k4_i[i]);
-          }
-        }
-      }
+      yStepArr.push(Number.isFinite(yS) ? yS : NaN);
+      yImpulseArr.push(Number.isFinite(yI) ? yI : NaN);
+      xStep = nextState(xStep);
+      xImp = nextState(xImp);
     }
 
-    const metrics = this.computeMetrics(tArr, yStepArr, stability, num, den, poles);
+    const metrics = startTime === 0 ? this.computeMetrics(tArr, yStepArr, stability, num, den, poles) : this.emptyMetrics();
 
     return {
       stepResponse: { t: tArr, y: yStepArr },

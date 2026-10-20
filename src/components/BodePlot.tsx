@@ -1,6 +1,10 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useId } from 'react';
 import { BarChart2, Compass } from 'lucide-react';
 import { TransferFunction, BodeData } from '../core/types';
+import { Frequency } from '../core/frequency';
+import { axisTicks, panRange, zoomRange } from '../core/timePlot';
+import { usePlotDrag } from './usePlotDrag';
+import { PlotControls } from './PlotControls';
 
 interface BodePlotProps {
   systems: TransferFunction[];
@@ -12,14 +16,21 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
   
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const clipId = useId();
+  const [frequencyWindow, setFrequencyWindow] = useState<[number, number] | null>(null);
+  const [verticalWindow, setVerticalWindow] = useState<{ magnitude: [number, number]; phase: [number, number] } | null>(null);
 
-  const activeSystems = useMemo(
+  const baseSystems = useMemo(
     () => systems.filter(s => s.visible && s.analysis && s.analysis.bode),
     [systems]
   );
+  const activeSystems = useMemo(() => baseSystems.map(system => frequencyWindow ? {
+    ...system, analysis: { ...system.analysis!, ...Frequency.calculateFrequencyResponse(system.numerator, system.denominator,
+      system.analysis!.poles, system.analysis!.zeros, [10 ** frequencyWindow[0], 10 ** frequencyWindow[1]]) },
+  } : system), [baseSystems, frequencyWindow]);
 
   // Global frequency bounds calculated directly from active systems
-  const { minW, maxW, minMag, maxMag, minPhase, maxPhase } = useMemo(() => {
+  const bounds = useMemo(() => {
     let minFreq = Infinity;
     let maxFreq = -Infinity;
     let minM = Infinity;
@@ -68,6 +79,10 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
       maxPhase: Math.ceil(maxP / 45) * 45 + 20,
     };
   }, [activeSystems]);
+  const minW = frequencyWindow ? 10 ** frequencyWindow[0] : bounds.minW;
+  const maxW = frequencyWindow ? 10 ** frequencyWindow[1] : bounds.maxW;
+  const [minMag, maxMag] = verticalWindow?.magnitude ?? [bounds.minMag, bounds.maxMag];
+  const [minPhase, maxPhase] = verticalWindow?.phase ?? [bounds.minPhase, bounds.maxPhase];
 
   // Dimensions inside SVG
   const width = 600;
@@ -82,7 +97,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
   const logMaxW = Math.log10(maxW);
 
   const wToX = (w: number) => {
-    const logW = Math.log10(Math.max(minW, Math.min(maxW, w)));
+    const logW = Math.log10(w);
     return padding.left + ((logW - logMinW) / (logMaxW - logMinW)) * plotWidth;
   };
 
@@ -135,11 +150,13 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
 
   // Frequency Decade Ticks
   const freqTicks = useMemo(() => {
+    if (logMaxW - logMinW < 1) return axisTicks(logMinW, logMaxW, 6).map(value => ({ val: 10 ** value, label: (10 ** value).toPrecision(3), isDecade: true }));
     const ticks: { val: number; label: string; isDecade: boolean }[] = [];
-    const startDec = Math.round(logMinW);
-    const endDec = Math.round(logMaxW);
+    const startDec = Math.floor(logMinW);
+    const endDec = Math.ceil(logMaxW);
+    const stride = Math.max(1, Math.ceil((endDec - startDec) / 10));
 
-    for (let dec = startDec; dec <= endDec; dec++) {
+    for (let dec = startDec; dec <= endDec; dec += stride) {
       const base = Math.pow(10, dec);
       if (base >= minW * 0.99 && base <= maxW * 1.01) {
         ticks.push({ val: base, label: dec === 0 ? '1' : `10^${dec}`, isDecade: true });
@@ -155,22 +172,24 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
   }, [logMinW, logMaxW, minW, maxW]);
 
   // Magnitude Ticks
-  const magTicks = useMemo(() => {
-    const list: number[] = [];
-    for (let m = minMag; m <= maxMag; m += 20) {
-      list.push(m);
-    }
-    return list;
-  }, [minMag, maxMag]);
+  const magTicks = axisTicks(minMag, maxMag, 5);
 
   // Phase Ticks
-  const phaseTicks = useMemo(() => {
-    const list: number[] = [];
-    for (let p = minPhase; p <= maxPhase; p += 45) {
-      list.push(p);
-    }
-    return list;
-  }, [minPhase, maxPhase]);
+  const phaseTicks = axisTicks(minPhase, maxPhase, 5);
+  const changeFrequency = (range: [number, number]) => {
+    if (range[0] >= -300 && range[1] <= 300) setFrequencyWindow(range);
+    setHoverSvgX(null);
+    setMousePos(null);
+  };
+  const zoom = (factor: number) => {
+    changeFrequency(zoomRange([logMinW, logMaxW], factor));
+    setVerticalWindow(current => current ? { magnitude: zoomRange(current.magnitude, factor), phase: zoomRange(current.phase, factor) } : null);
+  };
+  const move = (dx: number, dy: number) => {
+    changeFrequency(panRange([logMinW, logMaxW], -dx / plotWidth * (logMaxW - logMinW)));
+    if (dy !== 0) setVerticalWindow({ magnitude: panRange([minMag, maxMag], dy / subPlotHeight * (maxMag - minMag)), phase: panRange([minPhase, maxPhase], dy / subPlotHeight * (maxPhase - minPhase)) });
+  };
+  const drag = usePlotDrag(svgRef, move, zoom);
 
   // Pixel-perfect SVG coordinate calculation using getScreenCTM() for Mouse & Touch
   const updatePointerPosition = (clientX: number, clientY: number) => {
@@ -200,13 +219,8 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
   };
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (e.buttons) return;
     updatePointerPosition(e.clientX, e.clientY);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<SVGSVGElement>) => {
-    if (e.touches.length > 0) {
-      updatePointerPosition(e.touches[0].clientX, e.touches[0].clientY);
-    }
   };
 
   const handleMouseLeave = () => {
@@ -226,6 +240,8 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
             Diagrama de Bode (Magnitude e Fase)
           </h3>
         </div>
+
+        <PlotControls onZoom={zoom} onPan={(dx, dy) => move(dx * plotWidth, dy * subPlotHeight)} onReset={() => { setFrequencyWindow(null); setVerticalWindow(null); handleMouseLeave(); }} />
 
         {/* Stability Margins Overview */}
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -252,15 +268,18 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
       <div ref={containerRef} className="relative flex-1 bg-slate-50/50 dark:bg-slate-950 select-none overflow-hidden min-h-0 touch-pan-y">
         <svg
           ref={svgRef}
-          className="w-full h-full"
+          role="img" aria-label="Diagrama de Bode"
+          className="w-full h-full touch-none"
           viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="xMidYMid meet"
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
-          onTouchStart={handleTouchMove}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleMouseLeave}
+          {...drag}
         >
+          <defs>
+            <clipPath id={`${clipId}-magnitude`}><rect x={padding.left} y={padding.top} width={plotWidth} height={subPlotHeight} /></clipPath>
+            <clipPath id={`${clipId}-phase`}><rect x={padding.left} y={padding.top + subPlotHeight + gap} width={plotWidth} height={subPlotHeight} /></clipPath>
+          </defs>
           {/* Freq Grid Lines (Vertical) */}
           {freqTicks.map((t, idx) => {
             const x = wToX(t.val);
@@ -285,7 +304,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
                     textAnchor="middle"
                     className="font-mono select-none"
                   >
-                    {t.val < 1 ? t.val : t.val >= 1000 ? `10^${Math.log10(t.val)}` : t.val}
+                    {t.label}
                   </text>
                 )}
               </g>
@@ -359,14 +378,14 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
             for (let i = 0; i < w.length; i++) {
               const x = wToX(w[i]);
               const y = magToY(magDb[i]);
-              if (i === 0) dMag += `M ${x} ${y}`;
-              else dMag += ` L ${x} ${y}`;
+              if (!Number.isFinite(x) || !Number.isFinite(y)) { dMag += ' '; continue; }
+              dMag += `${i === 0 || !Number.isFinite(magDb[i - 1]) ? ' M' : ' L'} ${x} ${y}`;
             }
 
             const currentPoint = currentW !== null ? getBodeAtW(sys.analysis.bode, currentW) : null;
 
             return (
-              <g key={`mag-${sys.id}`}>
+              <g key={`mag-${sys.id}`} clipPath={`url(#${clipId}-magnitude)`}>
                 <path d={dMag} fill="none" stroke={sys.color} strokeWidth="3.5" opacity="0.15" />
                 <path d={dMag} fill="none" stroke={sys.color} strokeWidth="2.2" strokeLinecap="round" />
 
@@ -396,14 +415,14 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
             for (let i = 0; i < w.length; i++) {
               const x = wToX(w[i]);
               const y = phaseToY(phaseDeg[i]);
-              if (i === 0) dPhase += `M ${x} ${y}`;
-              else dPhase += ` L ${x} ${y}`;
+              if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+              dPhase += `${i === 0 || !Number.isFinite(phaseDeg[i - 1]) ? ' M' : ' L'} ${x} ${y}`;
             }
 
             const currentPoint = currentW !== null ? getBodeAtW(sys.analysis.bode, currentW) : null;
 
             return (
-              <g key={`phase-${sys.id}`}>
+              <g key={`phase-${sys.id}`} clipPath={`url(#${clipId}-phase)`}>
                 <path d={dPhase} fill="none" stroke={sys.color} strokeWidth="3.5" opacity="0.15" />
                 <path d={dPhase} fill="none" stroke={sys.color} strokeWidth="2.2" strokeLinecap="round" />
 
@@ -511,7 +530,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
           ))}
         </div>
         <div className="text-[11px] text-slate-500">
-          <span>Passe o mouse para leitura contínua de Magnitude e Fase</span>
+          <span>Arraste para mover · Ctrl + rolagem para zoom</span>
         </div>
       </div>
     </div>
