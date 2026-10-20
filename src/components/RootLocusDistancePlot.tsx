@@ -2,7 +2,6 @@ import React from 'react';
 import { Complex } from '../core/types';
 import { ComplexMath } from '../core/complex';
 import { rootLocusDistances } from '../core/rootLocusCheck';
-import { MathView } from './MathView';
 
 const format = (value: number) => String(Number(value.toPrecision(5)));
 const degrees = (radians: number) => radians * 180 / Math.PI;
@@ -31,22 +30,14 @@ export const RootLocusDistancePlot: React.FC<{
     const first = Math.ceil((middle - extent / scale) / step) * step;
     return Array.from({ length: Math.ceil(2 * extent / scale / step) + 1 }, (_, i) => first + i * step);
   };
-  const product = (items: typeof geometry.poles.vectors) => items.length
-    ? items.map(vector => format(vector.distance)).join(' \\cdot ') : '1';
-  const gainFormula = `K = ${format(geometry.coefficientRatio)} \\cdot \\frac{${product(geometry.poles.vectors)}}{${product(geometry.zeros.vectors)}}`;
-  const magnitudeFormula = `M = \\left|\\frac{B(s)}{A(s)}\\right| = ${format(1 / geometry.coefficientRatio)} \\cdot \\frac{${product(geometry.zeros.vectors)}}{${product(geometry.poles.vectors)}}`;
-  const magnitudeValue = geometry.magnitude === null ? '\\quad\\text{indefinido}'
-    : Number.isFinite(geometry.magnitude) ? ` \\approx ${format(geometry.magnitude)}` : ' \\to \\infty';
   const poleAngleSum = degrees(geometry.poles.vectors.reduce((sum, vector) => sum + vector.angle, 0));
   const zeroAngleSum = degrees(geometry.zeros.vectors.reduce((sum, vector) => sum + vector.angle, 0));
   const angleSum = (items: typeof geometry.poles.vectors, total: number) =>
-    items.some(vector => vector.distance === 0) ? 'Indefinida: s coincide com uma origem.'
-      : `${items.map(vector => `(${format(degrees(vector.angle))}°)`).join(' + ') || '0°'} = ${format(total)}°`;
+    items.some(vector => vector.distance === 0) ? 'Indefinida' : `${format(total)}°`;
 
   return <div className="mt-3 space-y-3 text-slate-700 dark:text-slate-300">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="font-semibold">Construção pelo método das distâncias</p>
-      <span className="text-[11px] text-slate-500 dark:text-slate-400">Clique no plano para mover s; ou use as coordenadas acima.</span>
+      <span className="text-[11px] text-slate-500 dark:text-slate-400">Clique no plano para mover s.</span>
     </div>
     <svg viewBox="0 0 560 320" role="img" aria-label={`Distâncias dos polos e zeros até s = ${ComplexMath.format(point, 5)}`}
       className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 cursor-crosshair"
@@ -102,11 +93,10 @@ export const RootLocusDistancePlot: React.FC<{
       <text x={x(point.re) + 10} y={y(point.im) - 10} fill="currentColor" fontSize="12" className="text-fuchsia-700 dark:text-fuchsia-300">s</text>
     </svg>
     <div className="flex flex-wrap gap-4 text-[11px]">
-      <span className="text-cyan-700 dark:text-cyan-300">× Polos de A(s) · linha contínua</span>
-      <span className="text-amber-700 dark:text-amber-300">○ Zeros de B(s) · linha tracejada</span>
+      <span className="text-cyan-700 dark:text-cyan-300">× Polos</span>
+      <span className="text-amber-700 dark:text-amber-300">○ Zeros</span>
       <span className="text-fuchsia-700 dark:text-fuchsia-300">● Ponto s</span>
     </div>
-    <p className="text-[11px] text-slate-500 dark:text-slate-400">Para A(s) + K B(s) = 0, usam-se os polos e zeros de B(s)/A(s). Ângulos medidos em relação ao eixo real positivo.</p>
     <div className="overflow-x-auto">
       <table className="w-full text-left text-xs">
         <caption className="sr-only">Distâncias e ângulos dos vetores até o ponto escolhido</caption>
@@ -120,19 +110,11 @@ export const RootLocusDistancePlot: React.FC<{
       </table>
     </div>
     <div className="space-y-2 rounded-lg bg-slate-100 dark:bg-slate-900 p-3">
-      <div className="overflow-x-auto py-1"><MathView math={`${magnitudeFormula}${magnitudeValue}`} /></div>
-      <div className="overflow-x-auto py-1"><MathView math={`${gainFormula}${geometry.gain === null ? '\\quad\\text{indefinido}' : ` \\approx ${format(geometry.gain)}`}`} /></div>
-      <p>M é o módulo da malha aberta sem K. Para M finito e positivo, K = 1/M.</p>
-      <p>Produtos sem fatores valem 1. O fator inicial corrige os coeficientes líderes.</p>
-      <p>Σ ângulos dos polos: {angleSum(geometry.poles.vectors, poleAngleSum)}</p>
-      <p>Σ ângulos dos zeros: {angleSum(geometry.zeros.vectors, zeroAngleSum)}</p>
-      {geometry.phase === null ? <p>Ângulo indefinido: s coincide com um polo ou zero. Use o resultado da verificação para esse caso.</p>
-        : <p className={geometry.angleSatisfied ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}>
-          Σ polos − Σ zeros + correção dos coeficientes: {format(poleAngleSum)}° − ({format(zeroAngleSum)}°) + ({geometry.phaseOffset}°)
-          {' '}= {format(poleAngleSum - zeroAngleSum + geometry.phaseOffset)}° ≡ {format(geometry.phase)}° (módulo 360°).
-          {' '}{geometry.angleSatisfied ? 'Condição angular satisfeita' : 'Condição angular não satisfeita'}: deve ser ±180°.
-        </p>}
-      <p className="text-[11px] text-slate-500 dark:text-slate-400">A razão das distâncias fornece o módulo de K; o ponto pertence ao LGR somente quando a condição angular e a equação característica também são satisfeitas.</p>
+      <p>M: {geometry.magnitude === null ? 'Indefinido' : Number.isFinite(geometry.magnitude) ? format(geometry.magnitude) : '∞'}</p>
+      <p>K: {geometry.gain === null ? 'Indefinido' : format(geometry.gain)}</p>
+      <p>Somatória Zeros: {angleSum(geometry.zeros.vectors, zeroAngleSum)}</p>
+      <p>Somatória Polos: {angleSum(geometry.poles.vectors, poleAngleSum)}</p>
+      <p>Zeros − Polos: {geometry.phase === null ? 'Indefinido' : `${format(zeroAngleSum - poleAngleSum)}°`}</p>
     </div>
   </div>;
 };

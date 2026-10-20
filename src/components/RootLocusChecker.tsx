@@ -45,7 +45,6 @@ export const RootLocusChecker: React.FC<{
       </label>
       <button type="submit" className="rounded-md bg-cyan-600 px-2.5 py-1.5 font-semibold text-white hover:bg-cyan-500">Verificar coordenada</button>
     </form>
-    <p className="text-[11px] text-slate-500 dark:text-slate-400">Método das distâncias: K é a razão entre os produtos das distâncias aos polos e aos zeros, ajustada pelos coeficientes líderes. A condição angular também deve ser satisfeita. Para expressões não lineares em K, resolve-se a equação característica. Tolerância: 10⁻⁶.</p>
     <div role="status" aria-live="polite" className="space-y-1.5">
       {inputError && <p className="text-rose-600 dark:text-rose-400">{inputError}</p>}
       {point && <p className="font-mono">s = {ComplexMath.format(point, 6)}</p>}
@@ -64,7 +63,7 @@ export const RootLocusChecker: React.FC<{
           setImaginary(String(next.im));
           setPoint(next);
         }} />}
-        {result && !geometry && <p className="mt-2 text-slate-500 dark:text-slate-400">A construção geométrica requer a forma A(s) + K B(s), com A e B não nulos. A verificação acima usa a equação característica.</p>}
+        {result && !geometry && <p className="mt-2 text-slate-500 dark:text-slate-400">Construção geométrica indisponível para esta expressão.</p>}
       </div>)}
       {point && results.length === 0 && <p>Adicione ou exiba um sistema válido para verificar a coordenada.</p>}
     </div>
