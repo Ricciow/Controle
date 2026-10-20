@@ -29,12 +29,19 @@ try {
   }
   const locusSystem = { inputMode: 'expression', rawExpression: '1/(s*(s+2))' };
   const checkPoint = (expression, re, im) => checkRootLocusPoint({ ...locusSystem, rawExpression: expression }, { re, im });
-  assert.deepEqual(checkPoint('1/(s*(s+2))', -1, 1), { belongs: true, gains: [2], allGains: false });
-  assert.deepEqual(checkPoint('K/(s*(s+2))', -1, -1), { belongs: true, gains: [2], allGains: false });
+  const assertPointGains = (result, expected) => {
+    assert.equal(result.belongs, true);
+    assert.equal(result.allGains, false);
+    assert.equal(result.gains.length, expected.length);
+    expected.forEach((gain, i) => assert.ok(Math.abs(result.gains[i] - gain) <= 1e-9 * Math.max(1, gain),
+      `Expected K=${gain}, got ${result.gains[i]}`));
+  };
+  assertPointGains(checkPoint('1/(s*(s+2))', -1, 1), [2]);
+  assertPointGains(checkPoint('K/(s*(s+2))', -1, -1), [2]);
   assert.deepEqual(checkPoint('1/(s*(s+2))', -2, 0), { belongs: true, gains: [0], allGains: false });
   assert.equal(checkPoint('1/(s*(s+2))', -3, 0).belongs, false); // Requires negative K.
   assert.equal(checkPoint('1/(s*(s+2))', -0.5, 1).belongs, false); // Complex required gain.
-  assert.deepEqual(checkPoint('1/(s*(s+2))', -1, 100), { belongs: true, gains: [10001], allGains: false });
+  assertPointGains(checkPoint('1/(s*(s+2))', -1, 100), [10001]);
   assert.equal(checkPoint('1/(s*(s+2))', -1, 1.732051).belongs, true); // Rounded coordinate.
   assert.deepEqual(checkPoint('K^2/(s+1)', -5, 0), { belongs: true, gains: [2], allGains: false });
   assert.deepEqual(checkPoint('(K-2)^2/(s+1)', -2, 0), { belongs: true, gains: [1, 3], allGains: false });
@@ -47,7 +54,16 @@ try {
   assert.equal(checkPoint('1/(s+1)', -1, 1).belongs, false);
   assert.throws(() => checkPoint('1/(s+1)', Infinity, 0));
   assert.throws(() => checkPoint('1/(s+1)', 0, NaN));
-  assert.deepEqual(checkRootLocusPoint({ inputMode: 'coefficients', numStr: '1', denStr: '1,2,0', unityFeedback: true }, { re: -1, im: 1 }).gains, [2]);
+  assertPointGains(checkRootLocusPoint({ inputMode: 'coefficients', numStr: '1', denStr: '1,2,0', unityFeedback: true }, { re: -1, im: 1 }), [2]);
+  assertPointGains(checkPoint('2*K*(s+3)/(s*(s+2))', -1, 0), [0.25]); // Leading coefficient and zero distance.
+  assertPointGains(checkPoint('-2*K/(s+1)', 0, 0), [0.5]); // Negative plant gain changes the angle condition.
+  assert.equal(checkPoint('-2*K/(s+1)', -2, 0).belongs, false);
+  assertPointGains(checkPoint('K/(s^2+2*s+5)', -1, 3), [5]); // Complex conjugate open-loop poles.
+  assertPointGains(checkPoint('K/(s*(s+1)*(s+2))', 0, Math.sqrt(2)), [6]);
+  assertPointGains(checkPoint('K/(s+1)^2', -1, 2), [4]); // Repeated poles.
+  assertPointGains(checkPoint('K/(s^2+K*s+1)', -1, Math.sqrt(2)), [2]); // K in the denominator: A(s)+K B(s).
+  assert.equal(checkPoint('K*(s+1)-1', 0, 0).belongs, false); // K=0 makes the whole characteristic zero.
+  assert.equal(checkPoint('K*(s+3)/(s*(s+2))', -3, 0).belongs, false); // A zero needs infinite gain.
   const feedbackPreview = { ...locusSystem, rawExpression: 'K/(s*(s+2))', unityFeedback: true, kValue: 3 };
   assert.ok(symbolicTransferLatex(feedbackPreview).includes('K'));
   assert.equal(symbolicTransferLatex(feedbackPreview), symbolicTransferLatex({ ...feedbackPreview, kValue: 10 }));

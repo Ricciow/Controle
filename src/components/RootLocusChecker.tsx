@@ -45,7 +45,7 @@ export const RootLocusChecker: React.FC<{
       </label>
       <button type="submit" className="rounded-md bg-cyan-600 px-2.5 py-1.5 font-semibold text-white hover:bg-cyan-500">Verificar coordenada</button>
     </form>
-    <p className="text-[11px] text-slate-500 dark:text-slate-400">s = σ + jω. Busca K ≥ 0, inclusive fora da faixa desenhada. Tolerância relativa: 10⁻⁶.</p>
+    <p className="text-[11px] text-slate-500 dark:text-slate-400">Método das distâncias: K é a razão entre os produtos das distâncias aos polos e aos zeros, ajustada pelos coeficientes líderes. A condição angular também deve ser satisfeita. Para expressões não lineares em K, resolve-se a equação característica. Busca K ≥ 0, inclusive fora da faixa desenhada. Tolerância: 10⁻⁶.</p>
     <div role="status" aria-live="polite" className="space-y-1.5">
       {inputError && <p className="text-rose-600 dark:text-rose-400">{inputError}</p>}
       {point && <p className="font-mono">s = {ComplexMath.format(point, 6)}</p>}
