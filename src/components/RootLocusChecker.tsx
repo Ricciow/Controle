@@ -6,11 +6,10 @@ import { RootLocusDistancePlot } from './RootLocusDistancePlot';
 
 export const RootLocusChecker: React.FC<{
   systems: TransferFunction[];
-  onSelectGain: (gain: number) => void;
-}> = ({ systems, onSelectGain }) => {
+}> = ({ systems }) => {
   const [real, setReal] = useState('-1');
   const [imaginary, setImaginary] = useState('1');
-  const [point, setPoint] = useState<Complex | null>(null);
+  const [point, setPoint] = useState<Complex | null>({ re: -1, im: 1 });
   const [inputError, setInputError] = useState('');
   const results = useMemo(() => point ? systems.filter(system => system.visible && system.analysis).map(system => {
     try {
@@ -46,7 +45,7 @@ export const RootLocusChecker: React.FC<{
       </label>
       <button type="submit" className="rounded-md bg-cyan-600 px-2.5 py-1.5 font-semibold text-white hover:bg-cyan-500">Verificar coordenada</button>
     </form>
-    <p className="text-[11px] text-slate-500 dark:text-slate-400">Método das distâncias: K é a razão entre os produtos das distâncias aos polos e aos zeros, ajustada pelos coeficientes líderes. A condição angular também deve ser satisfeita. Para expressões não lineares em K, resolve-se a equação característica. Busca K ≥ 0, inclusive fora da faixa desenhada. Tolerância: 10⁻⁶.</p>
+    <p className="text-[11px] text-slate-500 dark:text-slate-400">Método das distâncias: K é a razão entre os produtos das distâncias aos polos e aos zeros, ajustada pelos coeficientes líderes. A condição angular também deve ser satisfeita. Para expressões não lineares em K, resolve-se a equação característica. Tolerância: 10⁻⁶.</p>
     <div role="status" aria-live="polite" className="space-y-1.5">
       {inputError && <p className="text-rose-600 dark:text-rose-400">{inputError}</p>}
       {point && <p className="font-mono">s = {ComplexMath.format(point, 6)}</p>}
@@ -58,8 +57,6 @@ export const RootLocusChecker: React.FC<{
             <span className="text-emerald-700 dark:text-emerald-400">Pertence ao LGR. </span>
             {result.gains.map(gain => <span key={gain} className="inline-flex flex-wrap items-center gap-1.5 mr-2">
               <span className="font-mono">K ≈ {Number(gain.toPrecision(8))}</span>
-              {gain <= 1e6 && <button type="button" onClick={() => onSelectGain(gain)}
-                className="rounded border border-cyan-400/50 px-1.5 py-0.5 text-cyan-700 dark:text-cyan-300">Mostrar este K</button>}
             </span>)}
           </> : <span>Não pertence ao LGR para K ≥ 0.</span>}
         {point && geometry && <RootLocusDistancePlot point={point} geometry={geometry} onPointChange={next => {

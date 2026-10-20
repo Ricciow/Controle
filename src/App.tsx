@@ -4,6 +4,7 @@ import { Navbar, EnabledGraphs } from './components/Navbar';
 import { SystemList } from './components/SystemList';
 import { PoleZeroPlot } from './components/PoleZeroPlot';
 import { RootLocusPlot } from './components/RootLocusPlot';
+import { RootLocusChecker } from './components/RootLocusChecker';
 import { StepResponsePlot } from './components/StepResponsePlot';
 import { BodePlot } from './components/BodePlot';
 import { NyquistPlot } from './components/NyquistPlot';
@@ -36,6 +37,7 @@ export const App: React.FC = () => {
     step: true,
     roots: true,
     locus: false,
+    distances: false,
     bode: false,
     nyquist: false,
     table: true,
@@ -114,8 +116,8 @@ export const App: React.FC = () => {
   const suggestedName = `G${nextIndex}(s)`;
   const suggestedColor = INITIAL_COLORS[(nextIndex - 1) % INITIAL_COLORS.length];
 
-  const hasAnyGraph = enabledGraphs.step || enabledGraphs.roots || enabledGraphs.locus || enabledGraphs.bode || enabledGraphs.nyquist;
-  const activeGraphCount = (enabledGraphs.step ? 1 : 0) + (enabledGraphs.roots ? 1 : 0) + (enabledGraphs.locus ? 1 : 0) + (enabledGraphs.bode ? 1 : 0) + (enabledGraphs.nyquist ? 1 : 0);
+  const hasAnyGraph = enabledGraphs.step || enabledGraphs.roots || enabledGraphs.locus || enabledGraphs.distances || enabledGraphs.bode || enabledGraphs.nyquist;
+  const activeGraphCount = (enabledGraphs.step ? 1 : 0) + (enabledGraphs.roots ? 1 : 0) + (enabledGraphs.locus ? 1 : 0) + (enabledGraphs.distances ? 1 : 0) + (enabledGraphs.bode ? 1 : 0) + (enabledGraphs.nyquist ? 1 : 0);
 
   return (
     <div className="app-shell flex flex-col w-full bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-clip transition-colors">
@@ -242,6 +244,13 @@ export const App: React.FC = () => {
                   <div className="min-w-0">
                     <RootLocusPlot systems={systems} />
                   </div>
+                )}
+
+                {enabledGraphs.distances && (
+                  <section aria-label="Método das distâncias" className="xl:col-span-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-4 space-y-3 text-xs text-slate-600 dark:text-slate-300">
+                    <h3 className="font-semibold uppercase tracking-wider text-slate-800 dark:text-slate-100">Método das distâncias</h3>
+                    <RootLocusChecker systems={systems} />
+                  </section>
                 )}
 
                 {/* 3. Diagrama de Bode */}

@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pause, Play, RotateCcw } from 'lucide-react';
 import { PoleZeroPlot } from './PoleZeroPlot';
-import { RootLocusChecker } from './RootLocusChecker';
 import { TransferFunction } from '../core/types';
 import { calculateRootLocus, rootLocusGain, rootLocusPoles } from '../core/rootLocus';
 
@@ -109,11 +108,6 @@ export const RootLocusPlot: React.FC<{ systems: TransferFunction[] }> = ({ syste
       {entries.filter(entry => entry.error).map(({ system, error }) =>
         <p key={system.id} role="status" className="text-rose-600 dark:text-rose-400">{system.name}: {error}</p>)}
       {entries.length === 0 && <p>Adicione ou exiba um sistema válido para visualizar o LGR.</p>}
-      <RootLocusChecker systems={systems} onSelectGain={value => {
-        setIsPlaying(false);
-        setMaxGain(current => Math.max(current, value));
-        setGain(value);
-      }} />
     </div>
   } />;
 };

@@ -14,6 +14,7 @@ export interface EnabledGraphs {
   step: boolean;
   roots: boolean;
   locus: boolean;
+  distances: boolean;
   bode: boolean;
   nyquist: boolean;
   table: boolean;
@@ -37,6 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { key: 'step' as const, label: 'Resposta Temporal', icon: Activity },
     { key: 'roots' as const, label: 'Polos & Zeros', icon: Target },
     { key: 'locus' as const, label: 'Root Locus', icon: Target },
+    { key: 'distances' as const, label: 'Método das distâncias', icon: Compass },
     { key: 'bode' as const, label: 'Bode', icon: BarChart2 },
     { key: 'nyquist' as const, label: 'Nyquist', icon: Compass },
     { key: 'table' as const, label: 'Métricas', icon: Table },
