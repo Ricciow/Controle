@@ -69,6 +69,8 @@ try {
   assert.deepEqual(construction.poles.vectors.map(({ origin }) => ({ re: origin.re || 0, im: origin.im || 0 })), [{ re: -2, im: 0 }, { re: 0, im: 0 }]);
   assert.ok(construction.poles.vectors.every(vector => Math.abs(vector.distance - Math.sqrt(2)) < 1e-12));
   assert.ok(Math.abs(construction.gain - 2) < 1e-12);
+  assert.ok(Math.abs(construction.magnitude - 0.5) < 1e-12);
+  assert.ok(Math.abs(construction.magnitude * construction.gain - 1) < 1e-12);
   assert.ok(Math.abs(construction.phase - 180) < 1e-12);
   assert.equal(construction.angleSatisfied, true);
   assert.equal(construction.zeros.vectors.length, 0);
@@ -77,12 +79,17 @@ try {
   assert.deepEqual(withZero.zeros.vectors[0].origin, { re: -3, im: 0 });
   assert.equal(withZero.zeros.vectors[0].distance, 2);
   assert.equal(withZero.gain, 0.25);
+  assert.equal(withZero.magnitude, 4);
   assert.equal(distances('1/(s*(s+2))', -0.5, 1).angleSatisfied, false);
   assert.equal(distances('-2*K/(s+1)', 0, 0).angleSatisfied, true);
   assert.equal(distances('-2*K/(s+1)', 0, 0).phaseOffset, -180);
+  assert.equal(distances('-2*K/(s+1)', 0, 0).magnitude, 2);
   assert.equal(distances('K/(s+1)', -1, 0).phase, null);
   assert.equal(distances('K/(s+1)', -1, 0).gain, 0);
+  assert.equal(distances('K/(s+1)', -1, 0).magnitude, Infinity);
   assert.equal(distances('K*(s+3)/(s*(s+2))', -3, 0).gain, null);
+  assert.equal(distances('K*(s+3)/(s*(s+2))', -3, 0).magnitude, 0);
+  assert.equal(distances('(s+1)/(s+1)', -1, 0).magnitude, null);
   assert.equal(distances('K^2/(s+1)', -5, 0), null);
   assert.equal(distances('K*(s+1)-1', 0, 0), null);
   assert.throws(() => distances('1/(s+1)', Infinity, 0));

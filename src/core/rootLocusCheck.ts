@@ -41,6 +41,7 @@ export function rootLocusDistances(system: TransferFunction, point: Complex) {
   const poles = distanceProduct(polynomials[0], point);
   const zeros = distanceProduct(polynomials[1], point);
   const gain = poles.magnitude / zeros.magnitude;
+  const magnitude = zeros.magnitude / poles.magnitude;
   const angle = poles.angle - zeros.angle;
   const hasZeroDistance = [...poles.vectors, ...zeros.vectors].some(vector => vector.distance === 0);
   return {
@@ -48,6 +49,7 @@ export function rootLocusDistances(system: TransferFunction, point: Complex) {
     coefficientRatio: Math.abs(polynomials[0][0] / polynomials[1][0]),
     phaseOffset: (polynomials[0][0] < 0 ? 180 : 0) - (polynomials[1][0] < 0 ? 180 : 0),
     gain: Number.isFinite(gain) ? gain : null,
+    magnitude: Number.isNaN(magnitude) ? null : magnitude,
     phase: hasZeroDistance ? null : Math.atan2(Math.sin(angle), Math.cos(angle)) * 180 / Math.PI,
     angleSatisfied: !hasZeroDistance && Math.cos(angle) < 0 && Math.abs(Math.sin(angle)) <= tolerance,
   };

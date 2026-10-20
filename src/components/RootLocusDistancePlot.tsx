@@ -34,6 +34,9 @@ export const RootLocusDistancePlot: React.FC<{
   const product = (items: typeof geometry.poles.vectors) => items.length
     ? items.map(vector => format(vector.distance)).join(' \\cdot ') : '1';
   const gainFormula = `K = ${format(geometry.coefficientRatio)} \\cdot \\frac{${product(geometry.poles.vectors)}}{${product(geometry.zeros.vectors)}}`;
+  const magnitudeFormula = `M = \\left|\\frac{B(s)}{A(s)}\\right| = ${format(1 / geometry.coefficientRatio)} \\cdot \\frac{${product(geometry.zeros.vectors)}}{${product(geometry.poles.vectors)}}`;
+  const magnitudeValue = geometry.magnitude === null ? '\\quad\\text{indefinido}'
+    : Number.isFinite(geometry.magnitude) ? ` \\approx ${format(geometry.magnitude)}` : ' \\to \\infty';
 
   return <div className="mt-3 space-y-3 text-slate-700 dark:text-slate-300">
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -112,7 +115,9 @@ export const RootLocusDistancePlot: React.FC<{
       </table>
     </div>
     <div className="space-y-2 rounded-lg bg-slate-100 dark:bg-slate-900 p-3">
+      <div className="overflow-x-auto py-1"><MathView math={`${magnitudeFormula}${magnitudeValue}`} /></div>
       <div className="overflow-x-auto py-1"><MathView math={`${gainFormula}${geometry.gain === null ? '\\quad\\text{indefinido}' : ` \\approx ${format(geometry.gain)}`}`} /></div>
+      <p>M é o módulo da malha aberta sem K. Para M finito e positivo, K = 1/M.</p>
       <p>Produtos sem fatores valem 1. O fator inicial corrige os coeficientes líderes.</p>
       {geometry.phase === null ? <p>Ângulo indefinido: s coincide com um polo ou zero. Use o resultado da verificação para esse caso.</p>
         : <p className={geometry.angleSatisfied ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}>
