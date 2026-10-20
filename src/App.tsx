@@ -26,6 +26,8 @@ const INITIAL_COLORS = [
   '#ec4899', // Pink
 ];
 
+const SYSTEMS_STORAGE_KEY = 'controllab.systems.v1';
+
 export const App: React.FC = () => {
   const [isDark, setIsDark] = useState<boolean>(true);
   const [isPresetsOpen, setIsPresetsOpen] = useState<boolean>(false);
@@ -44,11 +46,39 @@ export const App: React.FC = () => {
     routh: true,
   });
 
-  // Initialize with ONE standard 2nd-order underdamped system
   const [systems, setSystems] = useState<TransferFunction[]>(() => {
+    try {
+      const stored = localStorage.getItem(SYSTEMS_STORAGE_KEY);
+      if (stored !== null) {
+        const saved: unknown = JSON.parse(stored);
+        if (!Array.isArray(saved) || !saved.every(system =>
+          system && typeof system === 'object' &&
+          ['id', 'name', 'color', 'rawExpression', 'numStr', 'denStr'].every(key => typeof system[key] === 'string') &&
+          typeof system.visible === 'boolean' &&
+          (system.inputMode === 'expression' || system.inputMode === 'coefficients') &&
+          (system.kValue === undefined || (typeof system.kValue === 'number' && Number.isFinite(system.kValue))) &&
+          (system.unityFeedback === undefined || typeof system.unityFeedback === 'boolean')
+        )) throw new Error('Dados de funções inválidos.');
+        return saved.map(system => Analyzer.analyzeTransferFunction({
+          ...system, numerator: [], denominator: [], latex: '', factoredLatex: '',
+        }));
+      }
+    } catch (error) {
+      console.warn('Não foi possível restaurar as funções salvas.', error);
+    }
     const sys1 = Analyzer.createDefaultFunction('1', 'G₁(s)', INITIAL_COLORS[0], '25 / (s^2 + 2s + 25)');
     return [sys1];
   });
+
+  useEffect(() => {
+    try {
+      const inputs = systems.map(({ id, name, color, visible, inputMode, rawExpression, numStr, denStr, kValue, unityFeedback }) =>
+        ({ id, name, color, visible, inputMode, rawExpression, numStr, denStr, kValue, unityFeedback }));
+      localStorage.setItem(SYSTEMS_STORAGE_KEY, JSON.stringify(inputs));
+    } catch (error) {
+      console.warn('Não foi possível salvar as funções neste navegador.', error);
+    }
+  }, [systems]);
 
   // Dark / Light mode toggle effect
   useEffect(() => {
