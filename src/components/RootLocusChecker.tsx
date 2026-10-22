@@ -57,7 +57,7 @@ export const RootLocusChecker: React.FC<{
             {result.gains.map(gain => <span key={gain} className="inline-flex flex-wrap items-center gap-1.5 mr-2">
               <span className="font-mono">K ≈ {Number(gain.toPrecision(8))}</span>
             </span>)}
-          </> : <span>Não pertence ao LGR para K ≥ 0.</span>}
+          </> : <span className="text-rose-600 dark:text-rose-400">Não pertence ao LGR para K ≥ 0.</span>}
         {point && geometry && <RootLocusDistancePlot point={point} geometry={geometry} onPointChange={next => {
           setReal(String(next.re));
           setImaginary(String(next.im));
