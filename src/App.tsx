@@ -55,7 +55,8 @@ export const App: React.FC = () => {
           system && typeof system === 'object' &&
           ['id', 'name', 'color', 'rawExpression', 'numStr', 'denStr'].every(key => typeof system[key] === 'string') &&
           typeof system.visible === 'boolean' &&
-          (system.inputMode === 'expression' || system.inputMode === 'coefficients') &&
+          (system.inputMode === 'expression' || system.inputMode === 'coefficients' ||
+            (system.inputMode === 'roots' && typeof system.polesStr === 'string' && typeof system.zerosStr === 'string')) &&
           (system.kValue === undefined || (typeof system.kValue === 'number' && Number.isFinite(system.kValue))) &&
           (system.unityFeedback === undefined || typeof system.unityFeedback === 'boolean')
         )) throw new Error('Dados de funções inválidos.');
@@ -72,8 +73,8 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     try {
-      const inputs = systems.map(({ id, name, color, visible, inputMode, rawExpression, numStr, denStr, kValue, unityFeedback }) =>
-        ({ id, name, color, visible, inputMode, rawExpression, numStr, denStr, kValue, unityFeedback }));
+      const inputs = systems.map(({ id, name, color, visible, inputMode, rawExpression, numStr, denStr, kValue, unityFeedback, polesStr, zerosStr }) =>
+        ({ id, name, color, visible, inputMode, rawExpression, numStr, denStr, kValue, unityFeedback, polesStr, zerosStr }));
       localStorage.setItem(SYSTEMS_STORAGE_KEY, JSON.stringify(inputs));
     } catch (error) {
       console.warn('Não foi possível salvar as funções neste navegador.', error);

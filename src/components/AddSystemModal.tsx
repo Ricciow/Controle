@@ -6,6 +6,7 @@ import { ComplexMath } from '../core/complex';
 import { MathView } from './MathView';
 import { KControl } from './KControl';
 import { FeedbackControl } from './FeedbackControl';
+import { PoleZeroInputs } from './PoleZeroInputs';
 
 interface AddSystemModalProps {
   isOpen: boolean;
@@ -37,10 +38,10 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
 }) => {
   const [name, setName] = useState(suggestedName);
   const [color, setColor] = useState(suggestedColor);
-  const [inputMode, setInputMode] = useState<InputMode | 'factored'>('expression');
+  const [inputMode, setInputMode] = useState<InputMode>('expression');
   const [rawExpression, setRawExpression] = useState('');
-  const [zeroFactors, setZeroFactors] = useState('');
-  const [poleFactors, setPoleFactors] = useState('');
+  const [zerosStr, setZerosStr] = useState('');
+  const [polesStr, setPolesStr] = useState('');
   const [numStr, setNumStr] = useState('');
   const [denStr, setDenStr] = useState('');
   const [kValue, setKValue] = useState(1);
@@ -52,8 +53,8 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
       setName(suggestedName);
       setColor(suggestedColor);
       setRawExpression('');
-      setZeroFactors('');
-      setPoleFactors('');
+      setZerosStr('');
+      setPolesStr('');
       setNumStr('');
       setDenStr('');
       setInputMode('expression');
@@ -83,8 +84,10 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
       name: name.trim() || 'G(s)',
       color,
       visible: true,
-      inputMode: inputMode === 'factored' ? 'expression' : inputMode,
-      rawExpression: inputMode === 'factored' ? `K*(${zeroFactors.trim() || '1'})/(${poleFactors.trim() || '1'})` : rawExpression,
+      inputMode,
+      rawExpression,
+      polesStr,
+      zerosStr,
       kValue,
       unityFeedback,
       numStr,
@@ -103,7 +106,7 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
       analysis: analyzed.analysis,
       system: analyzed
     };
-  }, [name, color, inputMode, rawExpression, zeroFactors, poleFactors, numStr, denStr, kValue, unityFeedback]);
+  }, [name, color, inputMode, rawExpression, zerosStr, polesStr, numStr, denStr, kValue, unityFeedback]);
 
   if (!isOpen) return null;
 
@@ -216,9 +219,9 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setInputMode('factored')}
+                onClick={() => setInputMode('roots')}
                 className={`flex-1 py-1.5 rounded-lg font-medium transition-all ${
-                  inputMode === 'factored'
+                  inputMode === 'roots'
                     ? 'bg-cyan-600 text-white shadow-sm font-semibold'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
@@ -245,39 +248,40 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
                 Suporta potências (<code className="font-mono font-bold">5^2</code>), frações (<code className="font-mono font-bold">1/2s</code>), produtos e parênteses.
               </p>
             </div>
+          ) : inputMode === 'roots' ? (
+            <PoleZeroInputs poles={polesStr} zeros={zerosStr} onPolesChange={setPolesStr} onZerosChange={setZerosStr} />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  {inputMode === 'factored' ? 'Zeros' : 'Numerador'} <span className="text-[10px] text-slate-400 font-normal">{inputMode === 'factored' ? '(fatores)' : '(s^m ... s^0)'}</span>:
+                  Numerador <span className="text-[10px] text-slate-400 font-normal">(s^m ... s^0)</span>:
                 </label>
                 <input
                   type="text"
-                  aria-label={inputMode === 'factored' ? 'Fatores dos zeros' : 'Coeficientes do numerador'}
-                  value={inputMode === 'factored' ? zeroFactors : numStr}
-                  onChange={(e) => inputMode === 'factored' ? setZeroFactors(e.target.value) : setNumStr(e.target.value)}
+                  aria-label="Coeficientes do numerador"
+                  value={numStr}
+                  onChange={(e) => setNumStr(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-cyan-500 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-900 dark:text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                  placeholder={inputMode === 'factored' ? '(s+1)(s+4) ou 1' : 'Ex: 10'}
+                  placeholder="Ex: 10"
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  {inputMode === 'factored' ? 'Polos' : 'Denominador'} <span className="text-[10px] text-slate-400 font-normal">{inputMode === 'factored' ? '(fatores)' : '(s^n ... s^0)'}</span>:
+                  Denominador <span className="text-[10px] text-slate-400 font-normal">(s^n ... s^0)</span>:
                 </label>
                 <input
                   type="text"
-                  aria-label={inputMode === 'factored' ? 'Fatores dos polos' : 'Coeficientes do denominador'}
-                  value={inputMode === 'factored' ? poleFactors : denStr}
-                  onChange={(e) => inputMode === 'factored' ? setPoleFactors(e.target.value) : setDenStr(e.target.value)}
+                  aria-label="Coeficientes do denominador"
+                  value={denStr}
+                  onChange={(e) => setDenStr(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-cyan-500 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-900 dark:text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                  placeholder={inputMode === 'factored' ? 's(s+2)(s+5) ou 1' : 'Ex: 1, 3, 10'}
+                  placeholder="Ex: 1, 3, 10"
                 />
               </div>
             </div>
           )}
 
-          {inputMode === 'factored' && <p className="text-[11px] text-slate-500 dark:text-slate-400">K × zeros / polos · Campo vazio = 1.</p>}
-          {(inputMode === 'factored' || (inputMode === 'expression' && /[kK]/.test(rawExpression))) && <KControl value={kValue} onChange={setKValue} />}
+          {(inputMode === 'roots' || (inputMode === 'expression' && /[kK]/.test(rawExpression))) && <KControl value={kValue} onChange={setKValue} />}
           <FeedbackControl enabled={unityFeedback} onChange={setUnityFeedback} />
 
           {/* Real-time Preview Box */}

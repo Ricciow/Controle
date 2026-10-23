@@ -14,8 +14,8 @@ export interface RootLocusData {
 // Sweep an explicit K directly, without multiplying that gain a second time.
 export function rootLocusCharacteristic(system: TransferFunction, gain: number): number[] {
   if (!Number.isFinite(gain) || gain < 0) throw new Error('K deve ser finito e não negativo.');
-  const explicitK = system.inputMode === 'expression' && /[kK]/.test(system.rawExpression);
-  const plant = system.inputMode === 'expression'
+  const explicitK = system.inputMode !== 'coefficients' && /[kK]/.test(system.rawExpression);
+  const plant = system.inputMode !== 'coefficients'
     ? TransferFunctionParser.parseTransferFunction(system.rawExpression, gain)
     : {
       numerator: TransferFunctionParser.parseCoefficientsString(system.numStr),
@@ -79,7 +79,7 @@ export function calculateRootLocus(system: TransferFunction, maxGain: number, se
   }
   if (selectedGain !== undefined && selectedGain > maxGain) throw new Error('K selecionado deve estar dentro da faixa.');
   const selectedPoles = selectedGain === undefined ? [] : rootLocusPoles(system, selectedGain);
-  const reference = system.inputMode === 'expression'
+  const reference = system.inputMode !== 'coefficients'
     ? TransferFunctionParser.parseTransferFunction(system.rawExpression, 1)
     : { numerator: TransferFunctionParser.parseCoefficientsString(system.numStr) };
   const branches: Complex[][] = [];

@@ -3,7 +3,7 @@ export interface Complex {
   im: number;
 }
 
-export type InputMode = 'expression' | 'coefficients';
+export type InputMode = 'expression' | 'coefficients' | 'roots';
 
 export type StabilityStatus = 'STABLE' | 'MARGINALLY_STABLE' | 'UNSTABLE';
 
@@ -58,6 +58,8 @@ export interface TransferFunction {
   color: string;
   visible: boolean;
   inputMode: InputMode;
+  polesStr?: string;
+  zerosStr?: string;
   kValue?: number;
   unityFeedback?: boolean;
   rawExpression: string; // e.g. "(2s + 5^2)/(1/2s)"

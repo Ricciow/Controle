@@ -91,7 +91,7 @@ export function symbolicTransferLatex(system: TransferFunction): string {
 export function rootLocusGainCoefficients(system: TransferFunction): number[][] {
   const [numerator, denominator] = expressionParts(system);
   if (canonical(denominator) === '0') throw new Error('O denominador não pode ser zero.');
-  const explicitK = system.inputMode === 'expression' && /[kK]/.test(system.rawExpression);
+  const explicitK = system.inputMode !== 'coefficients' && /[kK]/.test(system.rawExpression);
   const characteristic = canonical(`(${denominator})+${explicitK ? '' : 'K*'}(${numerator})`);
   const [polynomial] = rationalParts(characteristic);
   const coefficients = polynomialCoefficients(polynomial, 'K');

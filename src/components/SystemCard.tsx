@@ -17,6 +17,8 @@ import { FeedbackControl } from './FeedbackControl';
 import { symbolicTransferExpression } from '../core/symbolicRouth';
 import { numericTransferText } from '../core/transferText';
 import { CopyFunctionButton } from './CopyFunctionButton';
+import { PoleZeroInputs } from './PoleZeroInputs';
+import { changeInputMode } from '../core/poleZeroInput';
 
 interface SystemCardProps {
   system: TransferFunction;
@@ -87,7 +89,8 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   const [showFactored, setShowFactored] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const hasK = system.inputMode === 'expression' && /[kK]/.test(system.rawExpression);
+  const [modeError, setModeError] = useState('');
+  const hasK = system.inputMode !== 'coefficients' && /[kK]/.test(system.rawExpression);
   const symbolicPreview = useMemo(() => {
     if (!hasK || !system.unityFeedback) return null;
     try {
@@ -98,10 +101,12 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   }, [hasK, system.inputMode, system.rawExpression, system.unityFeedback]);
 
   const handleModeChange = (mode: InputMode) => {
-    onUpdate({
-      ...system,
-      inputMode: mode
-    });
+    try {
+      onUpdate(changeInputMode(system, mode));
+      setModeError('');
+    } catch {
+      setModeError('Corrija a função antes de trocar o modo de entrada.');
+    }
   };
 
   const handleExpressionChange = (expr: string) => {
@@ -221,7 +226,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
       {/* Body */}
       <div className="p-3.5 sm:p-4 space-y-3">
         {/* Input Mode Selector */}
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center bg-slate-100 dark:bg-slate-950/80 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[11px] sm:text-xs">
             <button
               onClick={() => handleModeChange('expression')}
@@ -243,6 +248,16 @@ export const SystemCard: React.FC<SystemCardProps> = ({
             >
               Coeficientes
             </button>
+            <button
+              onClick={() => handleModeChange('roots')}
+              className={`px-2 sm:px-2.5 py-1 rounded-md font-medium transition-all ${
+                system.inputMode === 'roots'
+                  ? 'bg-cyan-600 text-white shadow-sm font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              Polos e zeros
+            </button>
           </div>
 
           <button
@@ -255,6 +270,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
           </button>
         </div>
 
+        {modeError && <p role="status" className="text-xs text-rose-600 dark:text-rose-400">{modeError}</p>}
         {/* Syntax Quick Help */}
         {showHelp && (
           <div className="p-2.5 bg-slate-50 dark:bg-slate-950/90 rounded-lg border border-slate-200 dark:border-cyan-500/20 text-xs text-slate-700 dark:text-slate-300 space-y-1">
@@ -282,6 +298,10 @@ export const SystemCard: React.FC<SystemCardProps> = ({
               placeholder="Ex: K / (s^3 + 2s^2 + 3s + K)"
             />
           </div>
+        ) : system.inputMode === 'roots' ? (
+          <PoleZeroInputs poles={system.polesStr ?? ''} zeros={system.zerosStr ?? ''}
+            onPolesChange={polesStr => onUpdate({ ...system, polesStr })}
+            onZerosChange={zerosStr => onUpdate({ ...system, zerosStr })} />
         ) : (
           <div className="grid grid-cols-2 gap-2">
             <div>

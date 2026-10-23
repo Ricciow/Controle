@@ -4,6 +4,7 @@ import { Polynomial } from './polynomial';
 import { Roots } from './roots';
 import { Simulation } from './simulation';
 import { Frequency } from './frequency';
+import { changeInputMode, poleZeroExpression } from './poleZeroInput';
 
 export const Analyzer = {
   analyzeTransferFunction(tf: TransferFunction): TransferFunction {
@@ -11,7 +12,10 @@ export const Analyzer = {
       let num: number[] = [];
       let den: number[] = [];
 
-      if (tf.inputMode === 'expression') {
+      if (tf.inputMode === 'roots') {
+        tf = { ...tf, rawExpression: poleZeroExpression(tf.polesStr ?? '', tf.zerosStr ?? '') };
+      }
+      if (tf.inputMode !== 'coefficients') {
         const parsed = TransferFunctionParser.parseTransferFunction(tf.rawExpression, tf.kValue ?? 1);
         num = parsed.numerator;
         den = parsed.denominator;
@@ -162,6 +166,7 @@ export const Analyzer = {
   },
 
   updateDampingRatio(tf: TransferFunction, newZeta: number): TransferFunction {
+    if (tf.inputMode === 'roots') return this.updateDampingRatio(changeInputMode(tf, 'expression'), newZeta);
     const params = this.getSecondOrderParams(tf);
     if (!params.isSecondOrder || params.a === null || params.c === null || params.wn === null) {
       return tf;
@@ -235,6 +240,7 @@ export const Analyzer = {
   },
 
   convertToSecondOrder(tf: TransferFunction, targetZeta: number = 0.5, targetWn: number = 5): TransferFunction {
+    if (tf.inputMode === 'roots') tf = changeInputMode(tf, 'expression');
     const wn = targetWn;
     const zeta = targetZeta;
     const a = 1;

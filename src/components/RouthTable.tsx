@@ -64,7 +64,7 @@ export const RouthTable: React.FC<{ systems: TransferFunction[] }> = ({ systems 
             <p className="text-xs text-slate-500 dark:text-slate-400">{system.unityFeedback ? 'Malha fechada · realimentação negativa unitária · P(s) = D(s) + N(s)' : 'Malha aberta · P(s) = D(s)'}</p>
             {symbolic ? <Suspense fallback={<p className="text-xs text-slate-500">Montando tabela em função de K…</p>}><SymbolicRouthTable system={system} /></Suspense> : <>
             {result && <div className="overflow-x-auto text-sm"><MathView math={`P(s) = ${Polynomial.toLaTeX(system.denominator)}`} /></div>}
-            {system.inputMode === 'expression' && /[kK]/.test(system.rawExpression) && <p className="text-xs font-mono text-cyan-700 dark:text-cyan-300">K = {system.kValue ?? 1}</p>}
+            {system.inputMode !== 'coefficients' && /[kK]/.test(system.rawExpression) && <p className="text-xs font-mono text-cyan-700 dark:text-cyan-300">K = {system.kValue ?? 1}</p>}
             {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
             {result && <>
               <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">

@@ -15,6 +15,47 @@ try {
   const { analyzeRouth } = require(join(buildDirectory, 'routh.js'));
   const { Analyzer } = require(join(buildDirectory, 'analyzer.js'));
   const { TransferFunctionParser: parser } = require(join(buildDirectory, 'parser.js'));
+  const { poleZeroExpression, changeInputMode } = require(join(buildDirectory, 'poleZeroInput.js'));
+  const listedSystem = Analyzer.analyzeTransferFunction({
+    ...Analyzer.createDefaultFunction('listed', 'Raízes', '#06b6d4'), inputMode: 'roots',
+    polesStr: '1, 2, -4', zerosStr: '3, 2', kValue: 3,
+  });
+  assert.equal(listedSystem.error, null);
+  assert.deepEqual(listedSystem.numerator, [3, -15, 18]);
+  assert.deepEqual(listedSystem.denominator, [1, 1, -10, 8]);
+  assert.deepEqual(Analyzer.analyzeTransferFunction({ ...listedSystem, unityFeedback: true }).denominator, [1, 4, -25, 26]);
+  assert.deepEqual(Analyzer.analyzeTransferFunction({ ...listedSystem, kValue: 0 }).numerator, [0]);
+  assert.deepEqual(Analyzer.analyzeTransferFunction({ ...listedSystem, kValue: -2 }).numerator, [-2, 10, -12]);
+  assert.deepEqual(parser.parseTransferFunction(poleZeroExpression('0, 0, -2', '')).denominator, [1, 2, 0, 0]);
+  assert.deepEqual(parser.parseTransferFunction(poleZeroExpression('', '0, 0')).numerator, [1, 0, 0]);
+  assert.deepEqual(parser.parseTransferFunction(poleZeroExpression('', '')).denominator, [1]);
+  assert.deepEqual(parser.parseTransferFunction(poleZeroExpression('-1+2j, -1-2j', '-3')).denominator, [1, 2, 5]);
+  for (const invalid of ['1foo', 'Infinity', '1/0', 's', '1,,2', '-1+2j']) {
+    assert.throws(() => poleZeroExpression(invalid, ''), undefined, invalid);
+  }
+  const assertCoefficientsClose = (actual, expected) => {
+    assert.equal(actual.length, expected.length);
+    actual.forEach((value, index) => assert.ok(Math.abs(value - expected[index]) < 1e-8 * Math.max(1, Math.abs(expected[index]))));
+  };
+  for (const unityFeedback of [false, true]) {
+    const original = Analyzer.analyzeTransferFunction({ ...Analyzer.createDefaultFunction('roundtrip', 'G', '#06b6d4'), unityFeedback });
+    const asRoots = Analyzer.analyzeTransferFunction(changeInputMode(original, 'roots'));
+    assert.equal(asRoots.error, null);
+    assert.equal(asRoots.kValue, 25);
+    assertCoefficientsClose(asRoots.numerator, original.numerator);
+    assertCoefficientsClose(asRoots.denominator, original.denominator);
+    for (const mode of ['expression', 'coefficients']) {
+      const converted = Analyzer.analyzeTransferFunction(changeInputMode(asRoots, mode));
+      assertCoefficientsClose(converted.numerator, original.numerator);
+      assertCoefficientsClose(converted.denominator, original.denominator);
+    }
+    assert.equal(Analyzer.updateDampingRatio(asRoots, 0.5).error, null);
+  }
+  assert.deepEqual(Analyzer.analyzeTransferFunction(changeInputMode(listedSystem, 'coefficients')).numerator, listedSystem.numerator);
+  const reloadedLists = Analyzer.analyzeTransferFunction(JSON.parse(JSON.stringify(listedSystem)));
+  assert.equal(reloadedLists.inputMode, 'roots');
+  assert.equal(reloadedLists.polesStr, '1, 2, -4');
+  assert.deepEqual(reloadedLists.denominator, listedSystem.denominator);
   const factoredExpression = 'K*((s+1)(s+4))/(s(s+2)(s+5))';
   const factoredSystem = Analyzer.analyzeTransferFunction({
     ...Analyzer.createDefaultFunction('factored', 'Fatores', '#06b6d4'), rawExpression: factoredExpression, kValue: 3,
@@ -38,6 +79,11 @@ try {
     assert.throws(() => parsePointCoordinate(expression), /expressões reais finitas/, expression);
   }
   const { calculateRootLocus, rootLocusCharacteristic, rootLocusPoles, rootLocusGain, advanceRootLocusGain, rootLocusGainForRadius } = require(join(buildDirectory, 'rootLocus.js'));
+  const equivalentExpression = { ...listedSystem, inputMode: 'expression' };
+  assert.deepEqual(rootLocusGainCoefficients(listedSystem), rootLocusGainCoefficients(equivalentExpression));
+  assert.deepEqual(rootLocusCharacteristic(listedSystem, 2), rootLocusCharacteristic(equivalentExpression, 2));
+  assert.deepEqual(rootLocusPoles(listedSystem, 2), rootLocusPoles(equivalentExpression, 2));
+  assert.deepEqual(checkRootLocusPoint(listedSystem, { re: 2, im: 0 }), checkRootLocusPoint(equivalentExpression, { re: 2, im: 0 }));
   for (const maximum of [0.001, 100, 1e6]) {
     assert.equal(rootLocusGain(0, maximum), 0);
     assert.equal(rootLocusGain(1, maximum), maximum);
