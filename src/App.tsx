@@ -27,6 +27,17 @@ const INITIAL_COLORS = [
 ];
 
 const SYSTEMS_STORAGE_KEY = 'controllab.systems.v1';
+const GRAPHS_STORAGE_KEY = 'controllab.graphs.v1';
+const DEFAULT_ENABLED_GRAPHS: EnabledGraphs = {
+  step: true,
+  roots: true,
+  locus: false,
+  distances: false,
+  bode: false,
+  nyquist: false,
+  table: true,
+  routh: true,
+};
 
 export const App: React.FC = () => {
   const [isDark, setIsDark] = useState<boolean>(true);
@@ -34,17 +45,26 @@ export const App: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [mobileTab, setMobileTab] = useState<'graphs' | 'systems' | 'table'>('graphs');
 
-  // Enabled graphs: Step Response, Pole-Zero Map, and Metrics Table active by default
-  const [enabledGraphs, setEnabledGraphs] = useState<EnabledGraphs>({
-    step: true,
-    roots: true,
-    locus: false,
-    distances: false,
-    bode: false,
-    nyquist: false,
-    table: true,
-    routh: true,
+  const [enabledGraphs, setEnabledGraphs] = useState<EnabledGraphs>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(GRAPHS_STORAGE_KEY) ?? 'null');
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+        return Object.fromEntries(Object.entries(DEFAULT_ENABLED_GRAPHS).map(([key, fallback]) =>
+          [key, typeof saved[key] === 'boolean' ? saved[key] : fallback])) as unknown as EnabledGraphs;
+      }
+    } catch (error) {
+      console.warn('Não foi possível restaurar as abas salvas.', error);
+    }
+    return DEFAULT_ENABLED_GRAPHS;
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(GRAPHS_STORAGE_KEY, JSON.stringify(enabledGraphs));
+    } catch (error) {
+      console.warn('Não foi possível salvar as abas neste navegador.', error);
+    }
+  }, [enabledGraphs]);
 
   const [systems, setSystems] = useState<TransferFunction[]>(() => {
     try {

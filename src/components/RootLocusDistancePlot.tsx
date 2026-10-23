@@ -17,7 +17,8 @@ export const RootLocusDistancePlot: React.FC<{
   const svgRef = useRef<SVGSVGElement>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [showConstruction, setShowConstruction] = useState(false);
+  const [showAngles, setShowAngles] = useState(false);
+  const [showDistances, setShowDistances] = useState(false);
   const changeZoom = (factor: number) => {
     const next = zoom / factor;
     if (!Number.isFinite(next) || next <= 0) return;
@@ -54,10 +55,16 @@ export const RootLocusDistancePlot: React.FC<{
 
   return <div className="mt-3 space-y-3 text-slate-700 dark:text-slate-300">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <button type="button" aria-pressed={showConstruction} onClick={() => setShowConstruction(current => !current)}
-        className="rounded-md bg-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-500">
-        {showConstruction ? 'Ocultar ângulos/distâncias' : 'Desenhar ângulos/distâncias'}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" aria-pressed={showAngles} onClick={() => setShowAngles(current => !current)}
+          className="rounded-md bg-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-500">
+          {showAngles ? 'Ocultar ângulos' : 'Desenhar ângulos'}
+        </button>
+        <button type="button" aria-pressed={showDistances} onClick={() => setShowDistances(current => !current)}
+          className="rounded-md bg-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-500">
+          {showDistances ? 'Ocultar distâncias' : 'Desenhar distâncias'}
+        </button>
+      </div>
       <span className="text-[11px] text-slate-500 dark:text-slate-400">Clique para mover s · Arraste para navegar</span>
       <PlotControls onZoom={changeZoom} onPan={(dx, dy) => move(dx * 560, dy * 320)} onReset={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} />
     </div>
@@ -75,7 +82,7 @@ export const RootLocusDistancePlot: React.FC<{
         const im = Number((center.im - (local.y - 160 - pan.y) / scale).toPrecision(5));
         if ([re, im].every(Number.isFinite)) onPointChange({ re, im });
       }}>
-      <title>{showConstruction ? 'Vetores dos polos (×) e zeros (○) até o ponto s (●)' : 'Polos (×), zeros (○) e ponto s (●)'}</title>
+      <title>{showDistances || showAngles ? 'Vetores dos polos (×) e zeros (○) até o ponto s (●)' : 'Polos (×), zeros (○) e ponto s (●)'}</title>
       <desc>Os comprimentos fornecem o ganho K. Os ângulos são medidos a partir do eixo real positivo em cada origem. Os valores também aparecem na tabela abaixo.</desc>
       <g className="text-slate-200 dark:text-slate-800" stroke="currentColor" strokeWidth="1">
         {ticks(center.re - pan.x / scale, 240).map((tick, i) => <line key={`x${i}`} x1={x(tick)} y1="24" x2={x(tick)} y2="288" />)}
@@ -100,13 +107,18 @@ export const RootLocusDistancePlot: React.FC<{
         const endY = oy - radius * Math.sin(angle);
         return <g key={vector.label} className={vector.pole ? 'text-cyan-600 dark:text-cyan-400' : 'text-amber-600 dark:text-amber-400'}>
           <title>{vector.label}: distância {format(vector.distance)}, ângulo {format(degrees(angle))}°</title>
-          {showConstruction && <>
+          {showDistances && <>
             <line x1={ox} y1={oy} x2={x(point.re)} y2={y(point.im)} stroke="currentColor" strokeWidth="2" strokeDasharray={vector.pole ? undefined : '6 4'} />
-            {vector.distance > 0 && <>
-              <line x1={ox} y1={oy} x2={ox + 26} y2={oy} stroke="currentColor" strokeWidth="1" opacity="0.5" />
-              <path d={`M ${ox + radius} ${oy} A ${radius} ${radius} 0 0 ${angle < 0 ? 1 : 0} ${endX} ${endY}`}
-                fill="none" stroke="currentColor" strokeWidth="1.5" />
-            </>}
+            <text x={(ox + x(point.re)) / 2 + 6} y={(oy + y(point.im)) / 2 - 6} fill="currentColor" fontSize="11"
+              paintOrder="stroke" strokeWidth="3" className="stroke-slate-50 dark:stroke-slate-950">d = {format(vector.distance)}</text>
+          </>}
+          {showAngles && vector.distance > 0 && <>
+            <line x1={ox} y1={oy} x2={ox + 26} y2={oy} stroke="currentColor" strokeWidth="1" opacity="0.5" />
+            <line x1={ox} y1={oy} x2={endX} y2={endY} stroke="currentColor" strokeWidth="1" opacity="0.5" />
+            <path d={`M ${ox + radius} ${oy} A ${radius} ${radius} 0 0 ${angle < 0 ? 1 : 0} ${endX} ${endY}`}
+              fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <text x={ox + 34 * Math.cos(angle / 2)} y={oy - 34 * Math.sin(angle / 2)} textAnchor="middle" fill="currentColor" fontSize="11"
+              paintOrder="stroke" strokeWidth="3" className="stroke-slate-50 dark:stroke-slate-950">{format(degrees(angle))}°</text>
           </>}
           {vector.pole ? <path d={`M ${ox - 5} ${oy - 5} l 10 10 M ${ox - 5} ${oy + 5} l 10 -10`} stroke="currentColor" strokeWidth="2.5" />
             : <circle cx={ox} cy={oy} r="6" fill="none" stroke="currentColor" strokeWidth="2.5" />}
