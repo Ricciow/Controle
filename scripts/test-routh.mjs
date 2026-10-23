@@ -15,6 +15,18 @@ try {
   const { analyzeRouth } = require(join(buildDirectory, 'routh.js'));
   const { Analyzer } = require(join(buildDirectory, 'analyzer.js'));
   const { TransferFunctionParser: parser } = require(join(buildDirectory, 'parser.js'));
+  const factoredExpression = 'K*((s+1)(s+4))/(s(s+2)(s+5))';
+  const factoredSystem = Analyzer.analyzeTransferFunction({
+    ...Analyzer.createDefaultFunction('factored', 'Fatores', '#06b6d4'), rawExpression: factoredExpression, kValue: 3,
+  });
+  assert.equal(factoredSystem.error, null);
+  assert.deepEqual(factoredSystem.numerator, [3, 15, 12]);
+  assert.deepEqual(factoredSystem.denominator, [1, 7, 10, 0]);
+  assert.equal(factoredSystem.rawExpression, factoredExpression);
+  assert.deepEqual(Analyzer.analyzeTransferFunction({ ...factoredSystem, unityFeedback: true }).denominator, [1, 10, 25, 12]);
+  assert.deepEqual(parser.parseTransferFunction('K*(1)/(1)', 2).numerator, [2]);
+  assert.deepEqual(parser.parseTransferFunction('K*((s+1)^2)/(s^2+2s+2)', -2).numerator, [-2, -4, -2]);
+  assert.throws(() => parser.parseTransferFunction('K*((s+1))/(0)'));
   const { analyzeSymbolicRouth, solveGainConditions, symbolicTransferLatex, rootLocusGainCoefficients } = require(join(buildDirectory, 'symbolicRouth.js'));
   const { checkRootLocusPoint, parsePointCoordinate, rootLocusDistances } = require(join(buildDirectory, 'rootLocusCheck.js'));
   for (const [expression, expected] of [
