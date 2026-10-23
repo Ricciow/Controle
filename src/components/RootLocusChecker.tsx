@@ -50,14 +50,14 @@ export const RootLocusChecker: React.FC<{
       {point && <p className="font-mono">s = {ComplexMath.format(point, 6)}</p>}
       {results.map(({ system, result, geometry, error }) => <div key={system.id} className="rounded border border-slate-200 dark:border-slate-700 p-2">
         <span className="font-semibold">{system.name}: </span>
-        {error ? <span className="text-rose-600 dark:text-rose-400">{error}</span>
-          : result?.allGains ? <span>Pertence ao LGR para todo K ≥ 0 em que a planta e a equação característica estejam definidas (polo fixo).</span>
-          : result?.belongs ? <>
-            <span className="text-emerald-700 dark:text-emerald-400">Pertence ao LGR. </span>
-            {result.gains.map(gain => <span key={gain} className="inline-flex flex-wrap items-center gap-1.5 mr-2">
-              <span className="font-mono">K ≈ {Number(gain.toPrecision(8))}</span>
-            </span>)}
-          </> : <span className="text-rose-600 dark:text-rose-400">Não pertence ao LGR para K ≥ 0.</span>}
+        <span className={`inline-block rounded-md border px-3 py-2 font-semibold ${result?.belongs
+          ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+          : 'border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-700 dark:bg-rose-950/60 dark:text-rose-300'}`}>
+          {error ? error
+            : result?.allGains ? 'Pertence para todo K válido ≥ 0.'
+            : result?.belongs ? `Pertence para K = ${result.gains.map(gain => Number(gain.toPrecision(8))).join(' ou ')}`
+            : 'Não pertence.'}
+        </span>
         {point && geometry && <RootLocusDistancePlot point={point} geometry={geometry} onPointChange={next => {
           setReal(String(next.re));
           setImaginary(String(next.im));
