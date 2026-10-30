@@ -104,25 +104,6 @@ export function rootLocusGainCoefficients(system: TransferFunction): number[][] 
   });
 }
 
-// Only a gain multiplying the whole plant belongs to this design workflow.
-export function proportionalPlantCoefficients(system: TransferFunction) {
-  const [sourceNumerator, sourceDenominator] = expressionParts(system);
-  const numerator = canonical(sourceNumerator);
-  const denominator = canonical(sourceDenominator);
-  if (denominator.includes('K')) throw new Error('O projeto proporcional exige denominador independente de K.');
-  if (numerator.includes('K')) {
-    const coefficients = polynomialCoefficients(numerator, 'K');
-    if (coefficients.length !== 2 || coefficients[0] !== '0') throw new Error('Use K multiplicando toda a planta, sem termos independentes ou potências de K.');
-  }
-  const plant = system.inputMode === 'coefficients'
-    ? { numerator: TransferFunctionParser.parseCoefficientsString(system.numStr), denominator: TransferFunctionParser.parseCoefficientsString(system.denStr) }
-    : TransferFunctionParser.parseTransferFunction(system.rawExpression, 1);
-  if (plant.denominator.every(value => value === 0) || plant.numerator.every(value => value === 0)) throw new Error('Informe uma planta não nula com denominador válido.');
-  if (plant.numerator.length > plant.denominator.length) throw new Error('A simulação exige uma planta própria.');
-  if (plant.denominator.length > 9) throw new Error('O projeto de desempenho suporta plantas até a 8ª ordem.');
-  return plant;
-}
-
 export interface GainConditions {
   latex: string;
   intervals: { lower: number; upper: number }[];

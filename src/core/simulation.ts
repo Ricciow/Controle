@@ -59,8 +59,7 @@ export const Simulation = {
     denominator: number[],
     poles: Complex[],
     endTime?: number,
-    startTime = 0,
-    sampleCount?: number
+    startTime = 0
   ): {
     stepResponse: SimulationResult;
     impulseResponse: SimulationResult;
@@ -69,9 +68,6 @@ export const Simulation = {
   } {
     if (!Number.isFinite(startTime) || startTime < 0 || (endTime !== undefined && (!Number.isFinite(endTime) || endTime <= startTime))) {
       throw new Error('Intervalo de tempo inválido.');
-    }
-    if (sampleCount !== undefined && (!Number.isInteger(sampleCount) || sampleCount < 400 || sampleCount > 50000)) {
-      throw new Error('Use entre 400 e 50.000 amostras temporais.');
     }
     const num = Polynomial.clean(numerator);
     const den = Polynomial.clean(denominator);
@@ -93,7 +89,7 @@ export const Simulation = {
       // Pure gain system: H(s) = K
       const gain = num[0] / den[0];
       const duration = endTime ?? Math.max(4.95, startTime + 1);
-      const t = Array.from({ length: sampleCount ?? 100 }, (_, i) => startTime + i * (duration - startTime) / ((sampleCount ?? 100) - 1));
+      const t = Array.from({ length: 100 }, (_, i) => startTime + i * (duration - startTime) / 99);
       return {
         stepResponse: { t, y: t.map(() => gain) },
         impulseResponse: { t, y: t.map((val) => (val === 0 ? gain * 100 : 0)) },
@@ -155,7 +151,7 @@ export const Simulation = {
     }
 
     const duration = tFinal - startTime;
-    const numPoints = sampleCount ?? Math.min(6400, Math.max(400, Math.ceil(duration / baseDuration * 399) + 1));
+    const numPoints = Math.min(6400, Math.max(400, Math.ceil(duration / baseDuration * 399) + 1));
     const sampleDt = duration / (numPoints - 1);
     const tArr: number[] = [];
     const yStepArr: number[] = [];
