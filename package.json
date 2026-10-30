@@ -4,13 +4,12 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node scripts/test-routh.mjs && node scripts/test-proportional.mjs",
+    "test": "node scripts/test-routh.mjs && node scripts/test-performance.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist",
-    "report:project": "node scripts/test-proportional.mjs --report"
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
     "katex": "^0.16.21",

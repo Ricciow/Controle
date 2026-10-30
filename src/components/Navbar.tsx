@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 export interface EnabledGraphs {
-  project: boolean;
+  performance: boolean;
   step: boolean;
   roots: boolean;
   locus: boolean;
@@ -36,7 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleTheme,
 }) => {
   const graphToggles = [
-    { key: 'project' as const, label: 'Projeto LGR', icon: Target },
+    { key: 'performance' as const, label: 'Desempenho', icon: Target },
     { key: 'step' as const, label: 'Resposta Temporal', icon: Activity },
     { key: 'roots' as const, label: 'Polos & Zeros', icon: Target },
     { key: 'locus' as const, label: 'Root Locus', icon: Target },

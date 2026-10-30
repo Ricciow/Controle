@@ -14,7 +14,7 @@ import { PresetsModal } from './components/PresetsModal';
 import { AddSystemModal } from './components/AddSystemModal';
 import { TransferFunction, PresetItem } from './core/types';
 import { Analyzer } from './core/analyzer';
-import { ProportionalDesignPanel } from './components/ProportionalDesignPanel';
+import { PerformanceAnalysisPanel } from './components/PerformanceAnalysisPanel';
 
 const INITIAL_COLORS = [
   '#06b6d4', // Cyan
@@ -30,7 +30,7 @@ const INITIAL_COLORS = [
 const SYSTEMS_STORAGE_KEY = 'controllab.systems.v1';
 const GRAPHS_STORAGE_KEY = 'controllab.graphs.v1';
 const DEFAULT_ENABLED_GRAPHS: EnabledGraphs = {
-  project: true,
+  performance: false,
   step: true,
   roots: true,
   locus: false,
@@ -165,12 +165,12 @@ export const App: React.FC = () => {
     setSystems([...systems, newSys]);
   };
 
-  const handleApplyProject = (plant: TransferFunction, gains: number[]) => {
+  const handleApplyPerformance = (plant: TransferFunction, gains: number[]) => {
     const added = gains.map((kValue, index) => Analyzer.analyzeTransferFunction({ ...plant,
-      id: 'project-case-' + plant.id + '-' + index, name: plant.name + ' · K=' + Number(kValue.toPrecision(7)),
+      id: 'performance-case-' + plant.id + '-' + index, name: plant.name + ' · K=' + Number(kValue.toPrecision(7)),
       kValue, unityFeedback: true, visible: true, color: INITIAL_COLORS[index % INITIAL_COLORS.length],
     }));
-    setSystems(previous => [...previous.filter(system => !system.id.startsWith('project-case-' + plant.id + '-')), ...added]);
+    setSystems(previous => [...previous.filter(system => !system.id.startsWith('performance-case-' + plant.id + '-')), ...added]);
     setEnabledGraphs(previous => ({ ...previous, step: true, roots: true, locus: true, table: true }));
     setMobileTab('graphs');
   };
@@ -286,8 +286,8 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {enabledGraphs.project && <div className={mobileTab === 'systems' ? 'hidden lg:block' : 'block'}>
-              <ProportionalDesignPanel systems={systems} onApply={handleApplyProject} />
+            {enabledGraphs.performance && <div className={mobileTab === 'systems' ? 'hidden lg:block' : 'block'}>
+              <PerformanceAnalysisPanel systems={systems} onApply={handleApplyPerformance} />
             </div>}
 
             {/* Graphs Grid (Shown when on graphs tab or on desktop) */}
@@ -348,7 +348,7 @@ export const App: React.FC = () => {
             )}
 
             {/* If no graphs or tables are enabled */}
-            {!enabledGraphs.project && !hasAnyGraph && !enabledGraphs.table && !enabledGraphs.routh && (
+            {!enabledGraphs.performance && !hasAnyGraph && !enabledGraphs.table && !enabledGraphs.routh && (
               <div className="flex flex-col items-center justify-center py-16 sm:py-24 text-slate-500 dark:text-slate-400 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white/50 dark:bg-slate-900/30 p-4 text-center">
                 <p className="text-sm font-medium mb-3">Nenhum gráfico selecionado no momento.</p>
                 <div className="flex flex-wrap items-center justify-center gap-2">

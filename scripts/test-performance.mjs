@@ -1,0 +1,76 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
+import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
+const require = createRequire(import.meta.url);
+const temporary = mkdtempSync(join(process.cwd(),'node_modules','.performance-tests-'));
+try {
+  const compiled = spawnSync(process.execPath,[require.resolve('typescript/bin/tsc'),'src/core/analyzer.ts','src/core/performanceAnalysis.ts','src/core/performancePlots.ts','src/components/PerformanceAnalysisPanel.tsx','--outDir',temporary,'--module','commonjs','--moduleResolution','node','--target','ES2020','--jsx','react-jsx','--strict','--skipLibCheck','--esModuleInterop'],{encoding:'utf8'});
+  assert.equal(compiled.status,0,compiled.stdout+compiled.stderr);
+  const {createPerformanceModel,evaluatePerformance,sweepGain,performanceCsv} = require(join(temporary,'core','performanceAnalysis.js'));
+  const {performanceLocusSvg,performanceStepSvg,sweepMetricSvg} = require(join(temporary,'core','performancePlots.js'));
+  const {Analyzer} = require(join(temporary,'core','analyzer.js'));
+  const base={id:'test',name:'G(s)',color:'#06b6d4',visible:true,inputMode:'expression',rawExpression:'2/(s+3)',numStr:'2',denStr:'1,3',numerator:[2],denominator:[1,3],latex:'',factoredLatex:''};
+  const firstModel=createPerformanceModel(base);
+  const first=evaluatePerformance(firstModel,1);
+  assert.deepEqual(first.poles,[{re:-5,im:0}]);
+  assert.equal(first.stability,'STABLE');
+  assert.equal(first.meets,null);assert.equal(first.passesOvershoot,null);assert.equal(first.passesSettling,null);
+  assert.ok(Math.abs(first.settlingTime-Math.log(50)/5)<first.timeStep+1e-9);
+  assert.equal(first.overshoot,0);
+  assert.equal(evaluatePerformance(firstModel,1,{overshoot:0}).meets,true);
+  assert.equal(evaluatePerformance(firstModel,1,{settlingTime:first.settlingTime}).meets,false);
+  assert.equal(evaluatePerformance(firstModel,1,{settlingTime:first.settlingTime+0.01}).meets,true);
+  const secondModel=createPerformanceModel({...base,rawExpression:'1/(s^2+2s+2)'});
+  const second=evaluatePerformance(secondModel,2,{},true,20);
+  assert.ok(Math.abs(second.damping-0.5)<1e-10);
+  assert.ok(Math.abs(second.naturalFrequency-2)<1e-10);
+  assert.ok(Math.abs(second.overshoot-100*Math.exp(-Math.PI/Math.sqrt(3)))<0.003);
+  // Exact underdamped second-order step validates all time samples independently.
+  second.response.t.forEach((time,i)=>{
+    const exact=0.5*(1-Math.exp(-time)*(Math.cos(Math.sqrt(3)*time)+Math.sin(Math.sqrt(3)*time)/Math.sqrt(3)));
+    assert.ok(Math.abs(second.response.y[i]-exact)<1e-9);
+  });
+  assert.equal(second.response.t.at(-1),20);
+  const cubicModel=createPerformanceModel({...base,rawExpression:'K/(s*(s+1)*(s+2))'});
+  assert.deepEqual(cubicModel.stability.stabilityCondition.intervals,[{lower:0,upper:6}]);
+  assert.equal(evaluatePerformance(cubicModel,0).stability,'BOUNDARY');
+  assert.equal(evaluatePerformance(cubicModel,6).stability,'BOUNDARY');
+  const unstable=evaluatePerformance(cubicModel,7);
+  assert.equal(unstable.stability,'UNSTABLE');assert.equal(unstable.overshoot,null);assert.equal(unstable.settlingTime,null);
+  const coefficients=createPerformanceModel({...base,inputMode:'coefficients',numStr:'5',denStr:'1,4'});
+  assert.deepEqual(evaluatePerformance(coefficients,2).poles,[{re:-14,im:0}]);
+  const roots=createPerformanceModel(Analyzer.analyzeTransferFunction({...base,inputMode:'roots',polesStr:'-1,-3',zerosStr:'',kValue:1}));
+  assert.deepEqual(roots.denominator,[1,4,3]);
+  for(const rawExpression of ['K^2/(s+1)','(K+1)/(s+1)','K/(s+K)','0/(s+1)'])assert.throws(()=>createPerformanceModel({...base,rawExpression}));
+  for(const gain of [-1,NaN,Infinity,1e6+1])assert.throws(()=>evaluatePerformance(firstModel,gain));
+  assert.throws(()=>evaluatePerformance(firstModel,1,{settlingTime:0}));
+  assert.throws(()=>evaluatePerformance(firstModel,1,{overshoot:-1}));
+  const slow=evaluatePerformance(cubicModel,0.001);assert.equal(slow.complete,false);assert.equal(slow.settlingTime,null);
+  const abort=new AbortController();abort.abort();
+  await assert.rejects(sweepGain(firstModel,{},{min:0,max:5,samples:17},undefined,abort.signal),/cancelada/);
+  const sweep=await sweepGain(firstModel,{},{min:0,max:4,samples:17});
+  assert.equal(sweep.cases.length,17);assert.equal(sweep.cases[0].gain,0);assert.equal(sweep.cases.at(-1).gain,4);
+  assert.ok(sweep.cases.every(item=>item.meets===null&&!item.response));
+  sweep.cases.forEach(item=>assert.deepEqual(item.poles,[{re:-(3+2*item.gain),im:0}]));
+  assert.ok(sweep.cases.at(-1).settlingTime<sweep.cases[1].settlingTime);
+  const singularModel=createPerformanceModel({...base,rawExpression:'-1'});
+  const singular=await sweepGain(singularModel,{},{min:0,max:2,samples:3});
+  assert.equal(singular.cases[1].stability,'INCONCLUSIVE');assert.equal(singular.cases[1].meets,null);
+  assert.equal(performanceCsv(sweep.cases).split('\n').length,18);
+  const locus=performanceLocusSvg(firstModel,[first]);assert.ok(!locus.includes('stroke-dasharray="5 4"'));
+  assert.ok(performanceLocusSvg(firstModel,[first],{settlingTime:1}).includes('stroke-dasharray="5 4"'));
+  assert.ok(performanceStepSvg([second],20).includes('Tempo (s)'));
+  for(const metric of ['overshoot','settlingTime','damping','naturalFrequency'])assert.ok(!sweepMetricSvg(sweep,metric).includes('NaN'));
+  const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
+  const {PerformanceAnalysisPanel}=require(join(temporary,'components','PerformanceAnalysisPanel.js'));
+  const empty=renderToStaticMarkup(React.createElement(PerformanceAnalysisPanel,{systems:[],onApply:()=>{}}));
+  assert.ok(!empty.includes('<svg')); // No registered systems must not invent a model.
+  const populated=renderToStaticMarkup(React.createElement(PerformanceAnalysisPanel,{systems:[base],onApply:()=>{}}));
+  assert.ok(populated.includes('value="test"'));assert.ok(!populated.includes('role="alert"'));
+  console.log('Desempenho: múltiplas plantas, entradas por coeficientes/raízes, métricas analíticas, limites opcionais, varredura sem otimização, CSV e estado vazio passaram.');
+} finally {
+  if(!resolve(temporary).startsWith(resolve(process.cwd(),'node_modules')+sep))throw new Error('Temporário fora de node_modules.');
+  rmSync(temporary,{recursive:true,force:true});
+}
