@@ -59,7 +59,8 @@ export const Simulation = {
     denominator: number[],
     poles: Complex[],
     endTime?: number,
-    startTime = 0
+    startTime = 0,
+    sampleCount?: number
   ): {
     stepResponse: SimulationResult;
     impulseResponse: SimulationResult;
@@ -69,6 +70,7 @@ export const Simulation = {
     if (!Number.isFinite(startTime) || startTime < 0 || (endTime !== undefined && (!Number.isFinite(endTime) || endTime <= startTime))) {
       throw new Error('Intervalo de tempo inválido.');
     }
+    if (sampleCount !== undefined && (!Number.isInteger(sampleCount) || sampleCount < 2 || sampleCount > 24001)) throw new Error('Quantidade de amostras inválida.');
     const num = Polynomial.clean(numerator);
     const den = Polynomial.clean(denominator);
 
@@ -151,7 +153,7 @@ export const Simulation = {
     }
 
     const duration = tFinal - startTime;
-    const numPoints = Math.min(6400, Math.max(400, Math.ceil(duration / baseDuration * 399) + 1));
+    const numPoints = sampleCount ?? Math.min(6400, Math.max(400, Math.ceil(duration / baseDuration * 399) + 1));
     const sampleDt = duration / (numPoints - 1);
     const tArr: number[] = [];
     const yStepArr: number[] = [];

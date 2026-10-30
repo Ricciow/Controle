@@ -14,7 +14,7 @@ import { PresetsModal } from './components/PresetsModal';
 import { AddSystemModal } from './components/AddSystemModal';
 import { TransferFunction, PresetItem } from './core/types';
 import { Analyzer } from './core/analyzer';
-import { OvershootCard } from './components/OvershootCard';
+import { GainCalculatorCard } from './components/GainCalculatorCard';
 
 const INITIAL_COLORS = [
   '#06b6d4', // Cyan
@@ -30,7 +30,7 @@ const INITIAL_COLORS = [
 const SYSTEMS_STORAGE_KEY = 'controllab.systems.v1';
 const GRAPHS_STORAGE_KEY = 'controllab.graphs.v1';
 const DEFAULT_ENABLED_GRAPHS: EnabledGraphs = {
-  overshoot: true,
+  gainCalculator: true,
   step: true,
   roots: true,
   locus: false,
@@ -51,6 +51,7 @@ export const App: React.FC = () => {
     try {
       const saved = JSON.parse(localStorage.getItem(GRAPHS_STORAGE_KEY) ?? 'null');
       if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+        if (typeof saved.gainCalculator !== 'boolean' && typeof saved.overshoot === 'boolean') saved.gainCalculator = saved.overshoot;
         return Object.fromEntries(Object.entries(DEFAULT_ENABLED_GRAPHS).map(([key, fallback]) =>
           [key, typeof saved[key] === 'boolean' ? saved[key] : fallback])) as unknown as EnabledGraphs;
       }
@@ -276,8 +277,8 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {enabledGraphs.overshoot && <div className={mobileTab === 'systems' ? 'hidden lg:block' : 'block'}>
-              <OvershootCard systems={systems} />
+            {enabledGraphs.gainCalculator && <div className={mobileTab === 'systems' ? 'hidden lg:block' : 'block'}>
+              <GainCalculatorCard systems={systems} onApply={handleUpdateSystem} />
             </div>}
 
             {/* Graphs Grid (Shown when on graphs tab or on desktop) */}
@@ -338,7 +339,7 @@ export const App: React.FC = () => {
             )}
 
             {/* If no graphs or tables are enabled */}
-            {!enabledGraphs.overshoot && !hasAnyGraph && !enabledGraphs.table && !enabledGraphs.routh && (
+            {!enabledGraphs.gainCalculator && !hasAnyGraph && !enabledGraphs.table && !enabledGraphs.routh && (
               <div className="flex flex-col items-center justify-center py-16 sm:py-24 text-slate-500 dark:text-slate-400 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white/50 dark:bg-slate-900/30 p-4 text-center">
                 <p className="text-sm font-medium mb-3">Nenhum gráfico selecionado no momento.</p>
                 <div className="flex flex-wrap items-center justify-center gap-2">

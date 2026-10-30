@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node scripts/test-routh.mjs",
+    "test": "node scripts/test-routh.mjs && node scripts/test-gain.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",

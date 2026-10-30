@@ -29,7 +29,7 @@ O workflow de GitHub Pages executa compilação e testes ao receber alterações
 - Lugar das raízes, seleção de K, verificador de coordenadas e método das distâncias.
 - Routh-Hurwitz numérico e simbólico, com intervalos de estabilidade em função de K.
 - Bode, Nyquist, margens e tabela comparativa de métricas entre sistemas.
-- Card de sobressinal: selecione uma função para visualizar Mp em porcentagem, calculado pela análise existente da resposta ao degrau. O valor acompanha as alterações da função, de K e da realimentação. Respostas sem valor final estável são identificadas.
+- Card Calcular K: selecione uma função e informe sobressinal máximo (%) e/ou tempo de acomodação máximo (banda de 2%). A busca numérica encontra um ganho positivo para realimentação unitária negativa e permite aplicá-lo à função. A faixa de K é ajustável; não encontrar um ganho na busca não prova inviabilidade fora dela. O cálculo usa a resposta ao degrau completa, sem aproximação de segunda ordem.
 
 Para comparar ganhos, duplique a função, defina um K em cada cópia e observe as respostas e a tabela comparativa. O K selecionado no gráfico do LGR é independente do K de cada função.
 

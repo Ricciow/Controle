@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 export interface EnabledGraphs {
-  overshoot: boolean;
+  gainCalculator: boolean;
   step: boolean;
   roots: boolean;
   locus: boolean;
@@ -36,7 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleTheme,
 }) => {
   const graphToggles = [
-    { key: 'overshoot' as const, label: 'Sobressinal', icon: Activity },
+    { key: 'gainCalculator' as const, label: 'Calcular K', icon: Target },
     { key: 'step' as const, label: 'Resposta Temporal', icon: Activity },
     { key: 'roots' as const, label: 'Polos & Zeros', icon: Target },
     { key: 'locus' as const, label: 'Root Locus', icon: Target },
