@@ -11,7 +11,7 @@ interface BodePlotProps {
 }
 
 const formatValue = (value: number | null, unit: string) => {
-  if (value === null || Number.isNaN(value)) return 'Sem cruzamento';
+  if (value === null || Number.isNaN(value)) return '—';
   if (!Number.isFinite(value)) return `${value < 0 ? '−' : ''}∞${unit}`;
   const text = value !== 0 && (Math.abs(value) < 0.01 || Math.abs(value) >= 1e5)
     ? value.toExponential(2) : value.toFixed(2);
@@ -239,7 +239,8 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
   const currentW = hoverSvgX !== null ? xToW(hoverSvgX) : null;
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
+    <div className="flex flex-col bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
+      <div className="flex flex-col h-[390px] sm:h-[440px] xl:h-[480px] flex-shrink-0">
       {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between px-4 py-2.5 sm:py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/60 flex-shrink-0 gap-2">
         <div className="flex items-center gap-2">
@@ -252,29 +253,6 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
         <PlotControls onZoom={zoom} onPan={(dx, dy) => move(dx * plotWidth, dy * subPlotHeight)} onReset={() => { setFrequencyWindow(null); setVerticalWindow(null); handleMouseLeave(); }} />
 
       </div>
-
-        {/* Margins always refer to the complete function, independently of zoom. */}
-        <div className="grid sm:grid-cols-2 gap-2 px-4 py-2 border-b border-slate-200 dark:border-slate-800 max-h-40 overflow-y-auto flex-shrink-0" aria-label="Margens de estabilidade por função">
-          {activeSystems.map(sys => {
-            if (!sys.analysis?.metrics) return null;
-            const { phaseMarginDeg, gainMarginDb, gainCrossoverFreq, phaseCrossoverFreq } = sys.analysis.metrics;
-            return (
-              <div key={sys.id} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-950 rounded-md border border-slate-200 dark:border-slate-800 text-[11px]">
-                <div className="flex items-center gap-1.5 mb-1">
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: sys.color }} />
-                <span className="font-semibold text-slate-700 dark:text-slate-300 truncate">{sys.name}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-x-2 text-slate-500 dark:text-slate-400">
-                  <div>Margem de fase (MF)<br /><strong className="text-cyan-700 dark:text-cyan-300 font-mono">{formatValue(phaseMarginDeg, '°')}</strong>
-                    {gainCrossoverFreq !== null && <div className="text-[10px]">ωgc = {formatValue(gainCrossoverFreq, ' rad/s')}</div>}</div>
-                  <div>Margem de ganho (MG)<br /><strong className="text-cyan-700 dark:text-cyan-300 font-mono">{formatValue(gainMarginDb, ' dB')}</strong>
-                    {phaseCrossoverFreq !== null && <div className="text-[10px]">ωpc = {formatValue(phaseCrossoverFreq, ' rad/s')}</div>}</div>
-                </div>
-              </div>
-            );
-          })}
-          <p className="sm:col-span-2 text-[10px] text-slate-500 dark:text-slate-400">MF em 0 dB; MG em −180° (módulo 360°). Havendo vários cruzamentos, exibe a margem mais próxima de zero. ∞: sem cruzamento de fase.</p>
-        </div>
 
       {/* SVG Canvas */}
       <div ref={containerRef} className="relative flex-1 bg-slate-50/50 dark:bg-slate-950 select-none overflow-hidden min-h-0 touch-pan-y">
@@ -566,6 +544,43 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
         <div className="text-[11px] text-slate-500">
           <span>Arraste para mover · Ctrl + rolagem para zoom</span>
         </div>
+      </div>
+      </div>
+
+      {/* The table extends the card below the original graph area. */}
+      <div className="border-t border-slate-200 dark:border-slate-800 px-4 py-2">
+        <div className="max-h-40 overflow-auto">
+          <table className="w-full text-[11px] text-left whitespace-nowrap" aria-label="Margens de estabilidade por função">
+            <thead className="text-slate-500 dark:text-slate-400">
+              <tr>
+                <th scope="col" className="py-1 pr-3 font-medium">Função</th>
+                <th scope="col" className="py-1 px-2 text-right font-medium" title="Margem de fase (MF)">MF</th>
+                <th scope="col" className="py-1 px-2 text-right font-medium" title="Margem de ganho (MG)">MG</th>
+                <th scope="col" className="py-1 px-2 text-right font-medium">ωgc (rad/s)</th>
+                <th scope="col" className="py-1 pl-2 text-right font-medium">ωpc (rad/s)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {activeSystems.map(sys => {
+                if (!sys.analysis?.metrics) return null;
+                const { phaseMarginDeg, gainMarginDb, gainCrossoverFreq, phaseCrossoverFreq } = sys.analysis.metrics;
+                return <tr key={sys.id}>
+                  <th scope="row" className="py-1.5 pr-3 font-medium text-slate-700 dark:text-slate-300">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: sys.color }} />
+                      <span className="max-w-32 truncate" title={sys.name}>{sys.name}</span>
+                    </span>
+                  </th>
+                  <td className="py-1.5 px-2 text-right font-mono text-cyan-700 dark:text-cyan-300">{formatValue(phaseMarginDeg, '°')}</td>
+                  <td className="py-1.5 px-2 text-right font-mono text-cyan-700 dark:text-cyan-300">{formatValue(gainMarginDb, ' dB')}</td>
+                  <td className="py-1.5 px-2 text-right font-mono text-slate-600 dark:text-slate-400">{formatValue(gainCrossoverFreq, '')}</td>
+                  <td className="py-1.5 pl-2 text-right font-mono text-slate-600 dark:text-slate-400">{formatValue(phaseCrossoverFreq, '')}</td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="pt-1 text-[10px] text-slate-500 dark:text-slate-400">MF em 0 dB · MG em −180° (módulo 360°) · Margem mais próxima de zero · ∞: sem cruzamento de fase · —: sem cruzamento</p>
       </div>
     </div>
   );

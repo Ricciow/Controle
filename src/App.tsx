@@ -313,7 +313,7 @@ export const App: React.FC = () => {
 
                 {/* 3. Diagrama de Bode */}
                 {enabledGraphs.bode && (
-                  <div className="h-[390px] sm:h-[440px] xl:h-[480px]">
+                  <div>
                     <BodePlot systems={systems} />
                   </div>
                 )}
