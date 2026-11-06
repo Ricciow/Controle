@@ -10,6 +10,14 @@ interface BodePlotProps {
   systems: TransferFunction[];
 }
 
+const formatValue = (value: number | null, unit: string) => {
+  if (value === null || Number.isNaN(value)) return 'Sem cruzamento';
+  if (!Number.isFinite(value)) return `${value < 0 ? '−' : ''}∞${unit}`;
+  const text = value !== 0 && (Math.abs(value) < 0.01 || Math.abs(value) >= 1e5)
+    ? value.toExponential(2) : value.toFixed(2);
+  return `${text}${unit}`;
+};
+
 export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
   const [hoverSvgX, setHoverSvgX] = useState<number | null>(null);
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
@@ -26,7 +34,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
   );
   const activeSystems = useMemo(() => baseSystems.map(system => frequencyWindow ? {
     ...system, analysis: { ...system.analysis!, ...Frequency.calculateFrequencyResponse(system.numerator, system.denominator,
-      system.analysis!.poles, system.analysis!.zeros, [10 ** frequencyWindow[0], 10 ** frequencyWindow[1]]) },
+      system.analysis!.poles, system.analysis!.zeros, [10 ** frequencyWindow[0], 10 ** frequencyWindow[1]], system.frequencyModel) },
   } : system), [baseSystems, frequencyWindow]);
 
   // Global frequency bounds calculated directly from active systems
@@ -243,26 +251,30 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
 
         <PlotControls onZoom={zoom} onPan={(dx, dy) => move(dx * plotWidth, dy * subPlotHeight)} onReset={() => { setFrequencyWindow(null); setVerticalWindow(null); handleMouseLeave(); }} />
 
-        {/* Stability Margins Overview */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      </div>
+
+        {/* Margins always refer to the complete function, independently of zoom. */}
+        <div className="grid sm:grid-cols-2 gap-2 px-4 py-2 border-b border-slate-200 dark:border-slate-800 max-h-40 overflow-y-auto flex-shrink-0" aria-label="Margens de estabilidade por função">
           {activeSystems.map(sys => {
             if (!sys.analysis?.metrics) return null;
-            const { phaseMarginDeg, gainMarginDb } = sys.analysis.metrics;
+            const { phaseMarginDeg, gainMarginDb, gainCrossoverFreq, phaseCrossoverFreq } = sys.analysis.metrics;
             return (
-              <div key={sys.id} className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 dark:bg-slate-950 rounded-md border border-slate-200 dark:border-slate-800 text-[10.5px]">
+              <div key={sys.id} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-950 rounded-md border border-slate-200 dark:border-slate-800 text-[11px]">
+                <div className="flex items-center gap-1.5 mb-1">
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: sys.color }} />
-                <span className="font-medium text-slate-700 dark:text-slate-300">{sys.name}:</span>
-                <span className="text-slate-500 dark:text-slate-400">
-                  PM: <strong className="text-cyan-700 dark:text-cyan-300 font-mono">{phaseMarginDeg !== null ? `${phaseMarginDeg}°` : '—'}</strong>
-                </span>
-                <span className="text-slate-500 dark:text-slate-400">
-                  GM: <strong className="text-cyan-700 dark:text-cyan-300 font-mono">{gainMarginDb !== null ? `${gainMarginDb} dB` : '—'}</strong>
-                </span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300 truncate">{sys.name}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-2 text-slate-500 dark:text-slate-400">
+                  <div>Margem de fase (MF)<br /><strong className="text-cyan-700 dark:text-cyan-300 font-mono">{formatValue(phaseMarginDeg, '°')}</strong>
+                    {gainCrossoverFreq !== null && <div className="text-[10px]">ωgc = {formatValue(gainCrossoverFreq, ' rad/s')}</div>}</div>
+                  <div>Margem de ganho (MG)<br /><strong className="text-cyan-700 dark:text-cyan-300 font-mono">{formatValue(gainMarginDb, ' dB')}</strong>
+                    {phaseCrossoverFreq !== null && <div className="text-[10px]">ωpc = {formatValue(phaseCrossoverFreq, ' rad/s')}</div>}</div>
+                </div>
               </div>
             );
           })}
+          <p className="sm:col-span-2 text-[10px] text-slate-500 dark:text-slate-400">MF em 0 dB; MG em −180° (módulo 360°). Havendo vários cruzamentos, exibe a margem mais próxima de zero. ∞: sem cruzamento de fase.</p>
         </div>
-      </div>
 
       {/* SVG Canvas */}
       <div ref={containerRef} className="relative flex-1 bg-slate-50/50 dark:bg-slate-950 select-none overflow-hidden min-h-0 touch-pan-y">
@@ -364,7 +376,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
           {/* -180 Deg Label */}
           {minPhase <= -180 && maxPhase >= -180 && (
             <text x={width - padding.right} y={phaseToY(-180) - 4} fill="#e11d48" className="dark:fill-rose-400 font-mono text-[9px] select-none" textAnchor="end" opacity="0.9">
-              Margem de Fase (-180°)
+              Referência de fase (-180°)
             </text>
           )}
 
@@ -440,6 +452,28 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
                 )}
               </g>
             );
+          })}
+
+          {/* Critical margin guides for each function. */}
+          {activeSystems.map(sys => {
+            if (!sys.analysis) return null;
+            const { phaseMarginDeg: pm, gainMarginDb: gm, gainCrossoverFreq: wg, phaseCrossoverFreq: wp } = sys.analysis.metrics;
+            const phase = wg !== null ? getBodeAtW(sys.analysis.bode, wg).phase : 0;
+            return <g key={`margins-${sys.id}`} stroke={sys.color} fill={sys.color}>
+              {wg !== null && wg >= minW && wg <= maxW && pm !== null && Number.isFinite(pm) && <g>
+                <g clipPath={`url(#${clipId}-magnitude)`}><circle cx={wToX(wg)} cy={magToY(0)} r={3.5} /></g>
+                <g clipPath={`url(#${clipId}-phase)`}>
+                  <line x1={wToX(wg)} x2={wToX(wg)} y1={phaseToY(phase)} y2={phaseToY(phase - pm)} strokeWidth={2} strokeDasharray="4 2" />
+                  <circle cx={wToX(wg)} cy={phaseToY(phase)} r={3.5} />
+                  <title>{`${sys.name}: MF = ${formatValue(pm, '°')}, ωgc = ${formatValue(wg, ' rad/s')}`}</title>
+                </g>
+              </g>}
+              {wp !== null && wp >= minW && wp <= maxW && gm !== null && Number.isFinite(gm) && <g clipPath={`url(#${clipId}-magnitude)`}>
+                <line x1={wToX(wp)} x2={wToX(wp)} y1={magToY(-gm)} y2={magToY(0)} strokeWidth={2} strokeDasharray="4 2" />
+                <circle cx={wToX(wp)} cy={magToY(-gm)} r={3.5} />
+                <title>{`${sys.name}: MG = ${formatValue(gm, ' dB')}, ωpc = ${formatValue(wp, ' rad/s')}`}</title>
+              </g>}
+            </g>;
           })}
 
           {/* Hover Crosshair Vertical Line exactly at hoverSvgX, vertically straight */}

@@ -21,7 +21,7 @@ export const NyquistPlot: React.FC<NyquistPlotProps> = ({ systems }) => {
   );
   const activeSystems = useMemo(() => baseSystems.map(system => frequencyRange ? {
     ...system, analysis: { ...system.analysis!, ...Frequency.calculateFrequencyResponse(system.numerator, system.denominator,
-      system.analysis!.poles, system.analysis!.zeros, frequencyRange) },
+      system.analysis!.poles, system.analysis!.zeros, frequencyRange, system.frequencyModel) },
   } : system), [baseSystems, frequencyRange]);
   const minFrequency = frequencyRange?.[0] ?? Math.min(0.1, ...baseSystems.map(system => system.analysis!.bode.w[0]));
   const maxFrequency = frequencyRange?.[1] ?? Math.max(100, ...baseSystems.map(system => system.analysis!.bode.w.at(-1)!));

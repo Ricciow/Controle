@@ -14,5 +14,12 @@ function polynomialText(coefficients: number[]): string {
 }
 
 export function numericTransferText(system: TransferFunction): string {
+  if (system.frequencyModel) {
+    const model = system.frequencyModel;
+    const open = `((${polynomialText(model.numerator)})/(${polynomialText(model.denominator)}))*e^(-${model.delay.toLocaleString('en-US', { useGrouping: false, maximumSignificantDigits: 17 })}s)`;
+    // Closed-loop copies use the displayed polynomial approximation because
+    // their denominator contains a sum with distinct delays.
+    if (!model.unityFeedback) return open;
+  }
   return `(${polynomialText(system.numerator)})/(${polynomialText(system.denominator)})`;
 }

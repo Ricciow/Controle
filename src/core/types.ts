@@ -71,6 +71,14 @@ export interface TransferFunction {
   factoredLatex: string;
   error?: string | null;
   analysis?: SystemAnalysis;
+  frequencyModel?: FrequencyModel;
+}
+
+export interface FrequencyModel {
+  numerator: number[];
+  denominator: number[];
+  delay: number; // Exact exp(-delay*s), before optional unity feedback.
+  unityFeedback?: boolean;
 }
 
 export interface PresetItem {

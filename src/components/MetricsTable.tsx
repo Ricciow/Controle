@@ -137,12 +137,12 @@ export const MetricsTable: React.FC<MetricsTableProps> = ({ systems }) => {
 
                   {/* Phase Margin */}
                   <td className="px-3 py-3 text-right font-mono text-cyan-700 dark:text-cyan-300 font-semibold whitespace-nowrap">
-                    {metrics.phaseMarginDeg !== null ? `${metrics.phaseMarginDeg}°` : '—'}
+                    {metrics.phaseMarginDeg !== null ? `${metrics.phaseMarginDeg.toFixed(2)}°` : '—'}
                   </td>
 
                   {/* Gain Margin */}
                   <td className="px-3 py-3 text-right font-mono text-cyan-700 dark:text-cyan-300 font-semibold whitespace-nowrap">
-                    {metrics.gainMarginDb !== null ? `${metrics.gainMarginDb} dB` : '—'}
+                    {metrics.gainMarginDb === Infinity ? '∞ dB' : metrics.gainMarginDb !== null ? `${metrics.gainMarginDb.toFixed(2)} dB` : '—'}
                   </td>
                 </tr>
               );

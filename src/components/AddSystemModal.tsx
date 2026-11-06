@@ -245,7 +245,7 @@ export const AddSystemModal: React.FC<AddSystemModalProps> = ({
                 placeholder="Ex: K / (s^3 + 2s^2 + 3s + K)"
               />
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                Suporta potências (<code className="font-mono font-bold">5^2</code>), frações (<code className="font-mono font-bold">1/2s</code>), produtos e parênteses.
+                Suporta potências, frações, vírgula decimal, parênteses, colchetes e <code>e</code> de Euler. Ex.: <code className="font-mono font-bold">20*e^(-0,2s) / [s*(s+1)]</code>. Atrasos são exatos no Bode e aproximados por Padé nas análises polinomiais.
               </p>
             </div>
           ) : inputMode === 'roots' ? (

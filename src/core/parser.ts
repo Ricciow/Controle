@@ -1,369 +1,215 @@
-import { Polynomial } from './polynomial';
+﻿import { Polynomial } from './polynomial';
+import { FrequencyModel } from './types';
 
-type TokenType = 'NUMBER' | 'PARAM' | 'VAR' | 'PLUS' | 'MINUS' | 'STAR' | 'SLASH' | 'CARET' | 'LPAREN' | 'RPAREN' | 'EOF';
-
-interface Token {
-  type: TokenType;
-  value: string;
-  pos: number;
+type TokenType = 'NUMBER' | 'PARAM' | 'VAR' | '+' | '-' | '*' | '/' | '^' | '(' | ')' | 'EOF';
+interface Token { type: TokenType; value: string }
+interface Value { numerator: number[]; denominator: number[]; delay: number }
+export interface ParsedTransferFunction {
+  numerator: number[];
+  denominator: number[];
+  isExpression: boolean;
+  frequencyModel?: FrequencyModel;
 }
 
-class Lexer {
-  private input: string;
-  private pos: number = 0;
-  private kValue: number;
-
-  constructor(input: string, kValue: number) {
-    this.input = input;
-    this.kValue = kValue;
-  }
-
-  public tokenize(): Token[] {
-    const tokens: Token[] = [];
-
-    while (this.pos < this.input.length) {
-      const char = this.input[this.pos];
-
-      if (/\s/.test(char)) {
-        this.pos++;
-        continue;
-      }
-
-      if (char === '+') {
-        tokens.push({ type: 'PLUS', value: '+', pos: this.pos++ });
-      } else if (char === '-') {
-        tokens.push({ type: 'MINUS', value: '-', pos: this.pos++ });
-      } else if (char === '*') {
-        tokens.push({ type: 'STAR', value: '*', pos: this.pos++ });
-      } else if (char === '/') {
-        tokens.push({ type: 'SLASH', value: '/', pos: this.pos++ });
-      } else if (char === '^') {
-        tokens.push({ type: 'CARET', value: '^', pos: this.pos++ });
-      } else if (char === '(') {
-        tokens.push({ type: 'LPAREN', value: '(', pos: this.pos++ });
-      } else if (char === ')') {
-        tokens.push({ type: 'RPAREN', value: ')', pos: this.pos++ });
-      } else if (char === 's' || char === 'S') {
-        tokens.push({ type: 'VAR', value: 's', pos: this.pos++ });
-      } else if (char === 'k' || char === 'K') {
-        tokens.push({ type: 'PARAM', value: String(this.kValue), pos: this.pos++ });
-      } else if (/[0-9]/.test(char) || (char === '.' && /[0-9]/.test(this.input[this.pos + 1] || ''))) {
-        let numStr = '';
-        const startPos = this.pos;
-        while (this.pos < this.input.length && /[0-9.]/.test(this.input[this.pos])) {
-          numStr += this.input[this.pos++];
-        }
-        tokens.push({ type: 'NUMBER', value: numStr, pos: startPos });
-      } else {
-        throw new Error(`Caractere inválido na expressão: '${char}' na posição ${this.pos + 1}`);
-      }
+// Commas denote decimals in expressions and separators in coefficient lists.
+export function normalizeExpression(input: string): string {
+  const stack: string[] = [];
+  for (const char of input) {
+    if (char === '(' || char === '[') stack.push(char);
+    else if (char === ')' || char === ']') {
+      if (stack.pop() !== (char === ')' ? '(' : '[')) throw new Error('Parênteses ou colchetes incompatíveis.');
     }
-
-    tokens.push({ type: 'EOF', value: '', pos: this.pos });
-    return tokens;
   }
+  if (stack.length) throw new Error('Parêntese ou colchete de fechamento ausente.');
+  return input.replace(/\[/g, '(').replace(/\]/g, ')').replace(/,/g, '.');
 }
 
+function tokenize(input: string, kValue: number): Token[] {
+  const tokens: Token[] = [];
+  let pos = 0;
+  while (pos < input.length) {
+    const char = input[pos];
+    if (/\s/.test(char)) { pos++; continue; }
+    if ('+-*/^()'.includes(char)) { tokens.push({ type: char as TokenType, value: char }); pos++; }
+    else if (/[sS]/.test(char)) { tokens.push({ type: 'VAR', value: 's' }); pos++; }
+    else if (/[kK]/.test(char)) { tokens.push({ type: 'PARAM', value: String(kValue) }); pos++; }
+    else if (char === 'e' || char === 'E') { tokens.push({ type: 'NUMBER', value: String(Math.E) }); pos++; }
+    else {
+      const number = input.slice(pos).match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/);
+      if (!number) throw new Error(`Caractere inválido na expressão: '${char}' na posição ${pos + 1}`);
+      if (input[pos + number[0].length] === '.') throw new Error('Número com mais de um separador decimal.');
+      tokens.push({ type: 'NUMBER', value: number[0] });
+      pos += number[0].length;
+    }
+  }
+  tokens.push({ type: 'EOF', value: '' });
+  return tokens;
+}
+const constant = (value: number): Value => ({ numerator: [value], denominator: [1], delay: 0 });
+const isZero = (polynomial: number[]) => polynomial.every(value => value === 0);
+const scalar = (value: Value): number | null => value.delay === 0 && value.numerator.length === 1 && value.denominator.length === 1
+  ? value.numerator[0] / value.denominator[0] : null;
+function multiply(left: Value, right: Value, divide = false): Value {
+  if (divide && isZero(right.numerator)) throw new Error('Divisão por zero.');
+  const result = {
+    numerator: Polynomial.mul(left.numerator, divide ? right.denominator : right.numerator),
+    denominator: Polynomial.mul(left.denominator, divide ? right.numerator : right.denominator),
+    delay: left.delay + (divide ? -right.delay : right.delay),
+  };
+  if (result.denominator.length === 1) {
+    result.numerator = Polynomial.scale(result.numerator, 1 / result.denominator[0]);
+    result.denominator = [1];
+  }
+  return result;
+}
 class ExpressionParser {
-  private tokens: Token[];
-  private current: number = 0;
-
-  constructor(tokens: Token[]) {
-    this.tokens = tokens;
+  private current = 0;
+  constructor(private tokens: Token[]) {}
+  private peek(): Token { return this.tokens[this.current]; }
+  private match(type: TokenType): boolean {
+    if (this.peek().type !== type) return false;
+    this.current++;
+    return true;
   }
-
-  private peek(): Token {
-    return this.tokens[this.current] || { type: 'EOF', value: '', pos: 0 };
+  parse(): Value {
+    const value = this.expression();
+    if (this.peek().type !== 'EOF') throw new Error(`Sintaxe inesperada próximo a '${this.peek().value}'`);
+    if (![...value.numerator, ...value.denominator, value.delay].every(Number.isFinite)) throw new Error('Expressão fora da faixa numérica.');
+    return value;
   }
-
-  private match(...types: TokenType[]): boolean {
-    const t = this.peek();
-    if (types.includes(t.type)) {
-      this.current++;
-      return true;
-    }
-    return false;
-  }
-
-  private previous(): Token {
-    return this.tokens[this.current - 1];
-  }
-
-  private checkImplicitMul(): boolean {
-    const prev = this.tokens[this.current - 1];
-    const curr = this.tokens[this.current];
-    if (!prev || !curr) return false;
-
-    // Implicit multiplication cases:
-    // NUMBER VAR (e.g. 2s)
-    // NUMBER LPAREN (e.g. 2(s+1))
-    // VAR LPAREN (e.g. s(s+1))
-    // RPAREN LPAREN (e.g. (s+1)(s+2))
-    // RPAREN VAR (e.g. (s+1)s)
-    // RPAREN NUMBER (e.g. (s+1)2)
-    // VAR VAR (e.g. s s)
-    if (
-      (['NUMBER', 'VAR', 'PARAM', 'RPAREN'].includes(prev.type) && curr.type === 'PARAM') ||
-      (prev.type === 'PARAM' && ['NUMBER', 'VAR', 'LPAREN'].includes(curr.type)) ||
-      (prev.type === 'NUMBER' && (curr.type === 'VAR' || curr.type === 'LPAREN')) ||
-      (prev.type === 'VAR' && (curr.type === 'VAR' || curr.type === 'LPAREN')) ||
-      (prev.type === 'RPAREN' && (curr.type === 'LPAREN' || curr.type === 'VAR' || curr.type === 'NUMBER'))
-    ) {
-      return true;
-    }
-    return false;
-  }
-
-  public parse(): number[] {
-    const poly = this.expression();
-    if (this.peek().type !== 'EOF') {
-      throw new Error(`Sintaxe inesperada próximo a '${this.peek().value}'`);
-    }
-    return Polynomial.clean(poly);
-  }
-
-  private expression(): number[] {
-    let expr = this.term();
-
-    while (this.peek().type === 'PLUS' || this.peek().type === 'MINUS') {
-      const op = this.peek().type;
-      this.current++;
-      const nextTerm = this.term();
-      if (op === 'PLUS') {
-        expr = Polynomial.add(expr, nextTerm);
-      } else {
-        expr = Polynomial.sub(expr, nextTerm);
+  private expression(): Value {
+    let value = this.term();
+    while (this.peek().type === '+' || this.peek().type === '-') {
+      const sign = this.tokens[this.current++].type === '+' ? 1 : -1;
+      const right = this.term();
+      if (Math.abs(value.delay - right.delay) > 1e-12 && !isZero(value.numerator) && !isZero(right.numerator)) {
+        throw new Error('Fatore o atraso exponencial fora da soma, como 20^(-0,2s)*(s+1).');
       }
+      const numerator = Polynomial.add(Polynomial.mul(value.numerator, right.denominator),
+        Polynomial.scale(Polynomial.mul(right.numerator, value.denominator), sign));
+      value = { numerator, denominator: Polynomial.mul(value.denominator, right.denominator),
+        delay: isZero(value.numerator) ? right.delay : value.delay };
     }
-
-    return expr;
+    return value;
   }
-
-  private term(): number[] {
-    let termVal = this.factor();
-
+  private term(): Value {
+    let value = this.unary();
     while (true) {
-      if (this.match('STAR')) {
-        const nextFactor = this.factor();
-        termVal = Polynomial.mul(termVal, nextFactor);
-      } else if (this.match('SLASH')) {
-        // Division inside term: check if dividing by constant or polynomial
-        const divisor = this.factor();
-        const cleanDiv = Polynomial.clean(divisor);
-        if (cleanDiv.length === 1 && cleanDiv[0] !== 0) {
-          termVal = Polynomial.scale(termVal, 1 / cleanDiv[0]);
-        } else {
-          throw new Error('Divisão interna por polinômio não constante detectada. Use barra principal para separar numerador e denominador.');
-        }
-      } else if (this.checkImplicitMul()) {
-        const nextFactor = this.factor();
-        termVal = Polynomial.mul(termVal, nextFactor);
-      } else {
-        break;
-      }
+      if (this.match('*')) value = multiply(value, this.unary());
+      else if (this.match('/')) value = multiply(value, this.unary(), true);
+      else if (['NUMBER', 'PARAM', 'VAR', '('].includes(this.peek().type)) value = multiply(value, this.unary());
+      else break;
     }
-
-    return termVal;
+    return value;
   }
-
-  private factor(): number[] {
-    let baseVal = this.base();
-
-    if (this.match('CARET')) {
-      const expToken = this.peek();
-      if (expToken.type === 'NUMBER') {
-        this.current++;
-        const exp = parseFloat(expToken.value);
-        if (!Number.isInteger(exp) || exp < 0) {
-          throw new Error(`Expoente deve ser um inteiro não-negativo (recebido: ${expToken.value})`);
-        }
-        baseVal = Polynomial.pow(baseVal, exp);
-      } else {
-        throw new Error(`Esperado número após '^', mas encontrado '${expToken.value}'`);
-      }
-    }
-
-    return baseVal;
+  private unary(): Value {
+    if (this.match('+')) return this.unary();
+    if (this.match('-')) { const value = this.unary(); return { ...value, numerator: Polynomial.scale(value.numerator, -1) }; }
+    return this.power();
   }
-
-  private base(): number[] {
-    if (this.match('PARAM')) return [Number(this.previous().value)];
-    if (this.match('PLUS')) {
-      return this.base();
+  private power(): Value {
+    const base = this.base();
+    if (!this.match('^')) return base;
+    const exponent = this.unary();
+    const exp = scalar(exponent);
+    const number = scalar(base);
+    if (number !== null && exp !== null) {
+      const result = number ** exp;
+      if (!Number.isFinite(result)) throw new Error('Potência deve produzir um número real e finito.');
+      return constant(result);
     }
-    if (this.match('MINUS')) {
-      return Polynomial.scale(this.base(), -1);
+    if (number !== null && number > 0 && exponent.delay === 0 && exponent.denominator.length === 1 && exponent.numerator.length <= 2) {
+      const coefficients = Polynomial.scale(exponent.numerator, 1 / exponent.denominator[0]);
+      return { numerator: [number ** coefficients[coefficients.length - 1]], denominator: [1],
+        delay: coefficients.length === 2 ? -Math.log(number) * coefficients[0] : 0 };
     }
-
-    if (this.match('NUMBER')) {
-      const numVal = parseFloat(this.previous().value);
-      // Check if this number is followed by slash and number directly (e.g. 1/2s -> 0.5s)
-      if (this.peek().type === 'SLASH' && this.tokens[this.current + 1]?.type === 'NUMBER') {
-        this.current++; // consume '/'
-        const denToken = this.tokens[this.current++];
-        const denVal = parseFloat(denToken.value);
-        if (denVal === 0) throw new Error('Divisão por zero em fração numérica');
-        return [numVal / denVal];
-      }
-      return [numVal];
+    if (exp === null || !Number.isInteger(exp) || Math.abs(exp) > 100) {
+      throw new Error('Use expoente inteiro de -100 a 100 para polinômios, ou base positiva com expoente linear em s.');
     }
-
-    if (this.match('VAR')) {
-      // 's' polynomial: 1*s + 0 -> [1, 0]
-      return [1, 0];
-    }
-
-    if (this.match('LPAREN')) {
-      const inside = this.expression();
-      if (!this.match('RPAREN')) {
-        throw new Error('Parêntese de fechamento \')\' ausente');
-      }
-      return inside;
-    }
-
-    throw new Error(`Elemento inesperado: '${this.peek().value || 'Fim de linha'}'`);
-  }
-}
-
-export const TransferFunctionParser = {
-  parseCoefficientsString(str: string): number[] {
-    const trimmed = str.trim();
-    if (!trimmed) return [1];
-
-    // Split by comma or space
-    const parts = trimmed.split(/[\s,]+/).filter(Boolean);
-    const nums = parts.map(p => {
-      // Support simple fractions like 1/2 in coefficient mode
-      if (p.includes('/')) {
-        const [n, d] = p.split('/');
-        const num = parseFloat(n);
-        const den = parseFloat(d);
-        if (isNaN(num) || isNaN(den) || den === 0) {
-          throw new Error(`Coeficiente fracionário inválido: ${p}`);
-        }
-        return num / den;
-      }
-      const val = parseFloat(p);
-      if (isNaN(val)) {
-        throw new Error(`Coeficiente inválido: ${p}`);
-      }
-      return val;
-    });
-
-    return Polynomial.clean(nums);
-  },
-
-  parsePolynomialExpression(expr: string, kValue: number = 1): number[] {
-    if (!Number.isFinite(kValue)) throw new Error('K deve ser um número real e finito.');
-    const trimmed = expr.trim();
-    if (!trimmed) return [0];
-    const lexer = new Lexer(trimmed, kValue);
-    const tokens = lexer.tokenize();
-    const parser = new ExpressionParser(tokens);
-    return parser.parse();
-  },
-
-  parseTransferFunction(input: string, kValue: number = 1): { numerator: number[]; denominator: number[]; isExpression: boolean } {
-    if (!Number.isFinite(kValue)) throw new Error('K deve ser um número real e finito.');
-    const cleanInput = input.trim();
-    if (!cleanInput) {
-      return { numerator: [1], denominator: [1, 1], isExpression: true };
-    }
-
-    // Check if user entered bracket/comma format e.g. "[1, 2] / [1, 2, 10]" or "1, 2 / 1, 2, 10"
-    if (/^[0-9\s,.\-\[\]\/]+$/.test(cleanInput) && !/[sS]/.test(cleanInput)) {
-      if (cleanInput.includes('/')) {
-        const slashIdx = cleanInput.indexOf('/');
-        const numPart = cleanInput.slice(0, slashIdx).replace(/[\[\]]/g, '');
-        const denPart = cleanInput.slice(slashIdx + 1).replace(/[\[\]]/g, '');
-        return {
-          numerator: TransferFunctionParser.parseCoefficientsString(numPart),
-          denominator: TransferFunctionParser.parseCoefficientsString(denPart),
-          isExpression: false
-        };
-      } else {
-        return {
-          numerator: TransferFunctionParser.parseCoefficientsString(cleanInput),
-          denominator: [1],
-          isExpression: false
-        };
-      }
-    }
-
-    // Find main division slash '/' outside balanced parentheses
-    let depth = 0;
-    let mainSlashIndex = -1;
-
-    for (let i = 0; i < cleanInput.length; i++) {
-      const char = cleanInput[i];
-      if (char === '(') depth++;
-      else if (char === ')') depth--;
-      else if (char === '/' && depth === 0) {
-        mainSlashIndex = i;
-        break;
-      }
-    }
-
-    if (mainSlashIndex !== -1) {
-      let numStr = cleanInput.substring(0, mainSlashIndex).trim();
-      let denStr = cleanInput.substring(mainSlashIndex + 1).trim();
-
-      // Unwrap outer parentheses if any: e.g. (2s + 5^2) -> 2s + 5^2
-      if (numStr.startsWith('(') && numStr.endsWith(')')) {
-        // verify balanced
-        let d = 0;
-        let balanced = true;
-        for (let k = 0; k < numStr.length - 1; k++) {
-          if (numStr[k] === '(') d++;
-          if (numStr[k] === ')') d--;
-          if (d === 0) { balanced = false; break; }
-        }
-        if (balanced) numStr = numStr.slice(1, -1).trim();
-      }
-
-      if (denStr.startsWith('(') && denStr.endsWith(')')) {
-        let d = 0;
-        let balanced = true;
-        for (let k = 0; k < denStr.length - 1; k++) {
-          if (denStr[k] === '(') d++;
-          if (denStr[k] === ')') d--;
-          if (d === 0) { balanced = false; break; }
-        }
-        if (balanced) denStr = denStr.slice(1, -1).trim();
-      }
-
-      const num = TransferFunctionParser.parsePolynomialExpression(numStr, kValue);
-      const den = TransferFunctionParser.parsePolynomialExpression(denStr, kValue);
-
-      if (Polynomial.clean(den).length === 1 && Polynomial.clean(den)[0] === 0) {
-        throw new Error('O denominador da função de transferência não pode ser nulo (zero).');
-      }
-
-      return {
-        numerator: num,
-        denominator: den,
-        isExpression: true
-      };
-    }
-
-    // No top-level division: expression is numerator with denominator = 1
-    let numStr = cleanInput;
-    if (numStr.startsWith('(') && numStr.endsWith(')')) {
-      let d = 0;
-      let balanced = true;
-      for (let k = 0; k < numStr.length - 1; k++) {
-        if (numStr[k] === '(') d++;
-        if (numStr[k] === ')') d--;
-        if (d === 0) { balanced = false; break; }
-      }
-      if (balanced) numStr = numStr.slice(1, -1).trim();
-    }
-
-    const num = TransferFunctionParser.parsePolynomialExpression(numStr, kValue);
+    if (exp < 0 && isZero(base.numerator)) throw new Error('Divisão por zero.');
     return {
-      numerator: num,
-      denominator: [1],
-      isExpression: true
+      numerator: Polynomial.pow(exp < 0 ? base.denominator : base.numerator, Math.abs(exp)),
+      denominator: Polynomial.pow(exp < 0 ? base.numerator : base.denominator, Math.abs(exp)),
+      delay: base.delay * exp,
     };
   }
+  private base(): Value {
+    const token = this.peek();
+    if (this.match('NUMBER') || this.match('PARAM')) return constant(Number(token.value));
+    if (this.match('VAR')) return { numerator: [1, 0], denominator: [1], delay: 0 };
+    if (this.match('(')) {
+      const value = this.expression();
+      if (!this.match(')')) throw new Error('Parêntese de fechamento ausente.');
+      return value;
+    }
+    throw new Error(`Elemento inesperado: '${token.value || 'Fim de linha'}'`);
+  }
+}
+function parseExpression(input: string, kValue: number): Value {
+  if (!Number.isFinite(kValue)) throw new Error('K deve ser um número real e finito.');
+  const value = new ExpressionParser(tokenize(normalizeExpression(input), kValue)).parse();
+  if (isZero(value.denominator)) throw new Error('O denominador não pode ser zero.');
+  if (value.denominator.length === 1) {
+    value.numerator = Polynomial.scale(value.numerator, 1 / value.denominator[0]);
+    value.denominator = [1];
+  }
+  return value;
+}
+export const TransferFunctionParser = {
+  parseCoefficientsString(str: string): number[] {
+    const trimmed = str.trim().replace(/^\[([\s\S]*)\]$/, '$1').trim();
+    if (!trimmed) return [1];
+    const nums = trimmed.split(/[\s,]+/).filter(Boolean).map(part => {
+      const fraction = part.split('/');
+      const values = fraction.map(value => Number(value));
+      if (fraction.length > 2 || fraction.some(value => !value) || !values.every(Number.isFinite) || values[1] === 0) {
+        throw new Error(`Coeficiente inválido: ${part}`);
+      }
+      return values[0] / (values[1] ?? 1);
+    });
+    return Polynomial.clean(nums);
+  },
+  parsePolynomialExpression(expr: string, kValue = 1): number[] {
+    if (!expr.trim()) return [0];
+    const value = parseExpression(expr, kValue);
+    if (value.delay !== 0 || value.denominator.length !== 1) throw new Error('Esperado um polinômio.');
+    return value.numerator;
+  },
+  parseTransferFunction(input: string, kValue = 1): ParsedTransferFunction {
+    if (!Number.isFinite(kValue)) throw new Error('K deve ser um número real e finito.');
+    const source = input.trim();
+    if (!source) return { numerator: [1], denominator: [1, 1], isExpression: true };
+    if (/^[0-9\s,.\-+\[\]\/]+$/.test(source)) {
+      const parts = source.split('/');
+      if (parts.length > 2) throw new Error('Use uma barra para separar as listas de coeficientes.');
+      const numerator = this.parseCoefficientsString(parts[0]);
+      const denominator = parts.length === 2 ? this.parseCoefficientsString(parts[1]) : [1];
+      if (isZero(denominator)) throw new Error('O denominador não pode ser zero.');
+      return { numerator, denominator, isExpression: false };
+    }
+    const normalized = normalizeExpression(source);
+    let depth = 0;
+    let slash = -1;
+    for (let i = 0; i < normalized.length; i++) {
+      if (normalized[i] === '(') depth++;
+      else if (normalized[i] === ')') depth--;
+      else if (normalized[i] === '/' && depth === 0) { slash = i; break; }
+    }
+    // Preserve the existing convention: a main slash separates the complete
+    // numerator and denominator, even if their outer grouping is omitted.
+    const value = parseExpression(slash < 0 ? normalized : `(${normalized.slice(0, slash)})/(${normalized.slice(slash + 1)})`, kValue);
+    if (value.delay < -1e-12) throw new Error('O atraso total deve ser não negativo (use expoente negativo em s).');
+    if (Math.abs(value.delay) < 1e-12 || isZero(value.numerator)) return { numerator: value.numerator, denominator: value.denominator, isExpression: true };
+    const frequencyModel: FrequencyModel = { numerator: value.numerator, denominator: value.denominator, delay: value.delay };
+    // Padé [4/4] for tools requiring polynomials. Frequency uses the exact delay.
+    const coefficients = [1];
+    for (let k = 1; k <= 4; k++) coefficients.push(coefficients[k - 1] * (5 - k) * value.delay / (k * (9 - k)));
+    const padeDen = coefficients.slice().reverse();
+    const padeNum = coefficients.map((value, k) => k % 2 ? -value : value).reverse();
+    const scale = 1 / padeDen[0];
+    const numerator = Polynomial.mul(value.numerator, padeNum.map(value => value * scale));
+    const denominator = Polynomial.mul(value.denominator, padeDen.map(value => value * scale));
+    if (![...numerator, ...denominator].every(Number.isFinite)) throw new Error('Atraso fora da faixa numérica da aproximação.');
+    return { numerator, denominator, isExpression: true, frequencyModel };
+  },
 };

@@ -1,7 +1,7 @@
 import nerdamer from 'nerdamer';
 import 'nerdamer/Algebra';
 import { TransferFunction } from './types';
-import { TransferFunctionParser } from './parser';
+import { TransferFunctionParser, normalizeExpression } from './parser';
 
 const canonical = (expression: string): string => {
   const symbol = nerdamer.getCore().PARSER.parse(expression);
@@ -39,11 +39,12 @@ function expressionParts(system: TransferFunction): [string, string] {
   if (system.inputMode === 'coefficients') {
     return [numericPolynomial(TransferFunctionParser.parseCoefficientsString(system.numStr)), numericPolynomial(TransferFunctionParser.parseCoefficientsString(system.denStr))];
   }
-  const source = system.rawExpression.trim();
-  if (!/[kK]/.test(source)) {
-    const parsed = TransferFunctionParser.parseTransferFunction(source);
+  const rawSource = system.rawExpression.trim();
+  if (!/[kK]/.test(rawSource)) {
+    const parsed = TransferFunctionParser.parseTransferFunction(rawSource);
     return [numericPolynomial(parsed.numerator), numericPolynomial(parsed.denominator)];
   }
+  const source = normalizeExpression(rawSource);
   // Accept precisely the expression alphabet used by the numeric parser.
   if (!/^[\d\s.sSkK+\-*/^()]+$/.test(source)) throw new Error('Use somente s, K, números e operações polinomiais.');
   let depth = 0;

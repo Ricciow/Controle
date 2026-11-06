@@ -1,4 +1,4 @@
-import { TransferFunction, SystemAnalysis, SecondOrderParams } from './types';
+import { TransferFunction, SystemAnalysis, SecondOrderParams, FrequencyModel } from './types';
 import { TransferFunctionParser } from './parser';
 import { Polynomial } from './polynomial';
 import { Roots } from './roots';
@@ -11,6 +11,7 @@ export const Analyzer = {
     try {
       let num: number[] = [];
       let den: number[] = [];
+      let frequencyModel: FrequencyModel | undefined;
 
       if (tf.inputMode === 'roots') {
         tf = { ...tf, rawExpression: poleZeroExpression(tf.polesStr ?? '', tf.zerosStr ?? '') };
@@ -19,6 +20,7 @@ export const Analyzer = {
         const parsed = TransferFunctionParser.parseTransferFunction(tf.rawExpression, tf.kValue ?? 1);
         num = parsed.numerator;
         den = parsed.denominator;
+        frequencyModel = parsed.frequencyModel ? { ...parsed.frequencyModel, unityFeedback: tf.unityFeedback } : undefined;
       } else {
         num = TransferFunctionParser.parseCoefficientsString(tf.numStr);
         den = TransferFunctionParser.parseCoefficientsString(tf.denStr);
@@ -50,11 +52,13 @@ export const Analyzer = {
       // LaTeX formatting
       const numLatex = Polynomial.toLaTeX(num);
       const denLatex = Polynomial.toLaTeX(den);
-      const latex = `\\frac{${numLatex}}{${denLatex}}`;
+      const rationalLatex = `\\frac{${numLatex}}{${denLatex}}`;
+      const exactOpenLatex = frequencyModel ? `\\frac{${Polynomial.toLaTeX(frequencyModel.numerator)}}{${Polynomial.toLaTeX(frequencyModel.denominator)}}e^{-${Number(frequencyModel.delay.toPrecision(8))}s}` : '';
+      const latex = frequencyModel ? (tf.unityFeedback ? `\\frac{${exactOpenLatex}}{1+${exactOpenLatex}}` : exactOpenLatex) : rationalLatex;
 
       // Factored LaTeX
       const gain = num[0] / den[0];
-      const factoredLatex = Polynomial.toFactoredLaTeX(gain, zeros, poles);
+      const factoredLatex = frequencyModel ? '' : Polynomial.toFactoredLaTeX(gain, zeros, poles);
 
       // Stability
       const stability = Simulation.getStability(poles);
@@ -63,7 +67,7 @@ export const Analyzer = {
       const timeSim = Simulation.simulateTimeDomain(num, den, poles);
 
       // Frequency domain simulation
-      const freqSim = Frequency.calculateFrequencyResponse(num, den, poles, zeros);
+      const freqSim = Frequency.calculateFrequencyResponse(num, den, poles, zeros, undefined, frequencyModel);
 
       // Combined Metrics
       const metrics = {
@@ -96,7 +100,8 @@ export const Analyzer = {
         latex,
         factoredLatex,
         error: null,
-        analysis
+        analysis,
+        frequencyModel
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao processar função de transferência.';
@@ -208,7 +213,7 @@ export const Analyzer = {
 
     // Extract numerator
     let numPart = '';
-    const cleanExpr = (tf.rawExpression || '').trim();
+    const cleanExpr = (tf.rawExpression || '').trim().replace(/\[/g, '(').replace(/\]/g, ')');
     let depth = 0;
     let mainSlashIndex = -1;
     for (let i = 0; i < cleanExpr.length; i++) {

@@ -104,8 +104,8 @@ export const SystemCard: React.FC<SystemCardProps> = ({
     try {
       onUpdate(changeInputMode(system, mode));
       setModeError('');
-    } catch {
-      setModeError('Corrija a função antes de trocar o modo de entrada.');
+    } catch (error) {
+      setModeError(error instanceof Error ? error.message : 'Corrija a função antes de trocar o modo de entrada.');
     }
   };
 
@@ -280,6 +280,8 @@ export const SystemCard: React.FC<SystemCardProps> = ({
               <li><span className="text-slate-900 dark:text-slate-200 font-bold">(2s + 5^2)/(1/2s)</span> (potências e frações)</li>
               <li><span className="text-slate-900 dark:text-slate-200 font-bold">(s + 1)*(s + 3) / (s^2 + 4s + 13)</span> (produtos)</li>
               <li><span className="text-slate-900 dark:text-slate-200 font-bold">10 / (s^3 + 2s^2 + 5s + 10)</span> (alta ordem)</li>
+              <li><span className="text-slate-900 dark:text-slate-200 font-bold">20^(-0,2s) / [s*(s+1)]</span> (atraso, vírgula decimal e colchetes)</li>
+              <li><span className="text-slate-900 dark:text-slate-200 font-bold">20*e^(-0,2s) / [s*(s+1)]</span> (e = constante de Euler)</li>
             </ul>
           </div>
         )}
@@ -351,11 +353,14 @@ export const SystemCard: React.FC<SystemCardProps> = ({
             <span>{system.error}</span>
           </div>
         )}
+        {!system.error && system.frequencyModel && <p className="text-xs text-amber-700 dark:text-amber-300">
+          Atraso de {Number(system.frequencyModel.delay.toPrecision(6))} s. Bode, Nyquist e margens usam o atraso exato; as demais análises usam aproximação de Padé de ordem 4.
+        </p>}
 
         {/* LaTeX Math Preview */}
         {!system.error && system.latex && (
           <div className="bg-slate-50 dark:bg-slate-950/60 rounded-lg p-2.5 border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center relative group">
-            <div className="self-end"><CopyFunctionButton text={numericTransferText(system)} /></div>
+            <div className="self-end"><CopyFunctionButton text={numericTransferText(system)} label={system.frequencyModel?.unityFeedback ? 'Copiar aproximação de Padé' : undefined} /></div>
             <div className="text-center overflow-x-auto max-w-full py-1 text-slate-900 dark:text-slate-100">
               <MathView 
                 math={`${system.unityFeedback ? 'T(s)' : system.name} = ${showFactored && system.factoredLatex ? system.factoredLatex : system.latex}`}

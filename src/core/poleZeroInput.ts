@@ -48,6 +48,9 @@ export function changeInputMode(system: TransferFunction, inputMode: InputMode):
   const plant = system.inputMode === 'coefficients'
     ? { numerator: TransferFunctionParser.parseCoefficientsString(system.numStr), denominator: TransferFunctionParser.parseCoefficientsString(system.denStr) }
     : TransferFunctionParser.parseTransferFunction(system.rawExpression, system.kValue ?? 1);
+  if ('frequencyModel' in plant && plant.frequencyModel) {
+    throw new Error('Mantenha o modo expressão para preservar o atraso exponencial.');
+  }
   if (inputMode === 'roots') {
     const list = (coefficients: number[]) => Roots.findRoots(coefficients).map(root => {
       const re = Number(root.re.toPrecision(12));
