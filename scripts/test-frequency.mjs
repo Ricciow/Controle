@@ -9,7 +9,7 @@ const temporary = mkdtempSync(join(process.cwd(), 'node_modules', '.frequency-te
 const close = (actual, expected, tolerance = 1e-6) => assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance * Math.max(1, Math.abs(expected)), `${actual} != ${expected}`);
 try {
   const build = spawnSync(process.execPath, [require.resolve('typescript/bin/tsc'),
-    'src/core/analyzer.ts', 'src/core/transferText.ts', 'src/core/symbolicRouth.ts', '--outDir', temporary,
+    'src/core/analyzer.ts', 'src/core/transferText.ts', 'src/core/symbolicRouth.ts', 'src/core/bodeAsymptotes.ts', '--outDir', temporary,
     '--module', 'commonjs', '--moduleResolution', 'node', '--target', 'ES2020',
     '--strict', '--esModuleInterop', '--skipLibCheck'], { encoding: 'utf8' });
   assert.equal(build.status, 0, build.stdout + build.stderr);
@@ -17,6 +17,7 @@ try {
   const { Analyzer } = require(join(temporary, 'analyzer.js'));
   const { Frequency } = require(join(temporary, 'frequency.js'));
   const { Roots } = require(join(temporary, 'roots.js'));
+  const { magnitudeAsymptotes, asymptoteMagnitude } = require(join(temporary, 'bodeAsymptotes.js'));
   const { numericTransferText } = require(join(temporary, 'transferText.js'));
   const { changeInputMode } = require(join(temporary, 'poleZeroInput.js'));
   const { symbolicTransferExpression } = require(join(temporary, 'symbolicRouth.js'));
@@ -26,6 +27,39 @@ try {
     return Frequency.calculateFrequencyResponse(parsed.numerator, parsed.denominator,
       Roots.findRoots(parsed.denominator), Roots.findRoots(parsed.numerator), undefined, parsed.frequencyModel);
   };
+  const asymptotes = system => magnitudeAsymptotes(system.numerator, system.denominator, system.frequencyModel);
+  const asymptoticDb = (decomposition, w) => decomposition.terms.reduce((sum, term) => sum + asymptoteMagnitude(term, w), 0);
+  // Hand-calculated normalized factors: 100(s+2) / [s(s+10)].
+  const factors = asymptotes(plant('100*(s+2)/[s*(s+10)]'));
+  assert.equal(factors.terms.length, 4);
+  close(factors.terms[0].offsetDb, 20 * Math.log10(20));
+  close(asymptoticDb(factors, 0.1), 20 * Math.log10(20) + 20);
+  close(asymptoticDb(factors, 2), 20);
+  close(asymptoticDb(factors, 10), 20);
+  close(asymptoticDb(factors, 100), 0);
+  const repeated = asymptotes(plant('1/s^3'));
+  assert.equal(repeated.terms.length, 2);
+  assert.equal(repeated.terms[1].slope, -60);
+  close(asymptoticDb(repeated, 0.1), 60);
+  close(asymptoticDb(repeated, 10), -60);
+  const differentiator = asymptotes(plant('-2*s^2'));
+  assert.equal(differentiator.terms[1].slope, 40);
+  close(asymptoticDb(differentiator, 10), 20 * Math.log10(2) + 40);
+  for (const expression of ['25/[s^2+2s+25]', '25/[s^2-2s+25]', '25/[(s+5)^2]']) {
+    const pair = asymptotes(plant(expression));
+    assert.equal(pair.terms.length, 2);
+    close(pair.terms[1].cornerFrequency, 5);
+    assert.equal(pair.terms[1].slope, -40);
+    close(asymptoticDb(pair, 0.5), 0);
+    close(asymptoticDb(pair, 50), -40);
+  }
+  const zeroPair = asymptotes(plant('(s^2+2s+25)/25'));
+  assert.equal(zeroPair.terms[1].slope, 40);
+  close(asymptoticDb(zeroPair, 50), 40);
+  const scaled = magnitudeAsymptotes([4, 8], [2, 20]);
+  close(scaled.terms[0].offsetDb, 20 * Math.log10(0.4));
+  close(asymptoticDb(scaled, 1000), 20 * Math.log10(2));
+  assert.deepEqual(asymptotes(plant('0/[s+1]')).terms, []);
   assert.deepEqual(parser.parseTransferFunction('[2s+5^2]/[1/2s]').numerator, [2, 25]);
   assert.deepEqual(parser.parseTransferFunction('[2s+5^2]/[1/2s]').denominator, [0.5, 0]);
   assert.deepEqual(parser.parseTransferFunction('1/s^2+2s+1').denominator, [1, 2, 1]);
@@ -91,6 +125,7 @@ try {
   // Exact delay: unchanged magnitude, analytically reduced phase margin.
   const delayed = plant('10*e^(-0,2s)/[s+1]');
   assert.equal(delayed.error, null);
+  assert.deepEqual(asymptotes(delayed), asymptotes(plant('10/[s+1]')), 'Delay must not introduce Padé poles/zeros into open-loop asymptotes');
   const metrics = delayed.analysis.metrics;
   close(metrics.gainCrossoverFreq, Math.sqrt(99));
   close(metrics.phaseMarginDeg, first.phaseMarginDeg - 0.2 * Math.sqrt(99) * 180 / Math.PI);
@@ -103,6 +138,13 @@ try {
   assert.throws(() => changeInputMode(delayed, 'coefficients'), /preservar o atraso/);
   const closed = Analyzer.analyzeTransferFunction({ ...delayed, unityFeedback: true });
   assert.equal(closed.error, null);
+  const closedAsymptotes = asymptotes(closed);
+  assert.equal(closedAsymptotes.padeApproximation, true);
+  assert.deepEqual(closedAsymptotes.terms, magnitudeAsymptotes(closed.numerator, closed.denominator).terms);
+  assert.ok(Number.isFinite(asymptoticDb(closedAsymptotes, 1)));
+  const rationalClosed = Analyzer.analyzeTransferFunction({ ...plant('10/[s+1]'), unityFeedback: true });
+  close(asymptoticDb(asymptotes(rationalClosed), 0.01), 20 * Math.log10(10 / 11));
+  close(asymptotes(rationalClosed).terms[1].cornerFrequency, 11);
   const at = closed.analysis.bode.w.findIndex(w => w >= 1);
   const w = closed.analysis.bode.w[at];
   const openRe = 10 * (Math.cos(0.2 * w) - w * Math.sin(0.2 * w)) / (1 + w ** 2);
@@ -131,8 +173,10 @@ try {
   const html = renderToStaticMarkup(createElement(BodePlot, { systems: [cubicSystem, firstSystem,
     { ...cubicSystem, id: 'hidden', name: 'Sistema oculto', visible: false }] }));
   for (const text of ['Margem de fase (MF)', 'Margem de ganho (MG)', '15.56 dB', '∞ dB', 'ωgc', 'ωpc', 'Sistema cúbico', 'Primeira ordem']) assert.ok(html.includes(text), text);
+  assert.ok(html.includes('Mostrar assíntotas') && html.includes('type="checkbox"'));
+  assert.ok(!html.includes('as assíntotas da aproximação') && !html.includes('tracejado curto: componentes'), 'Asymptotes are opt-in');
   assert.ok(!html.includes('Sistema oculto') && !html.includes('NaN') && !html.includes('Infinity'));
-  console.log('Frequency/parser: analytic margins, multiple crossovers, infinite/negative margins, zoom independence, Euler, exact delays, brackets, decimal commas, feedback and input validation passed.');
+  console.log('Frequency/parser: analytic margins, asymptotic contributions and sums, repeated origins, conjugate pairs, exact delays, Padé feedback, zoom independence and input validation passed.');
 } finally {
   if (!resolve(temporary).startsWith(resolve('node_modules') + sep)) throw new Error('Unsafe temporary directory');
   rmSync(temporary, { recursive: true, force: true });

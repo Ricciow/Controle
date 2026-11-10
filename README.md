@@ -37,6 +37,8 @@ As funções e as abas abertas são salvas no navegador.
 
 ## Expressões e margens no Bode
 
+Ative **Mostrar assíntotas** no Bode para visualizar as contribuições do ganho, dos polos e dos zeros à magnitude, com suas frequências de quebra e inclinações em dB/década. O tracejado longo mostra a soma assintótica e o curto identifica cada componente na legenda abaixo do gráfico. O atraso puro contribui com 0 dB em malha aberta; em malha fechada com atraso, as assíntotas usam a aproximação de Padé de ordem 4, identificada na legenda. A curva contínua mantém a resposta exata.
+
 O modo expressão aceita parênteses e colchetes como agrupadores, vírgula ou ponto decimal e `e` como a constante de Euler. Exemplos:
 
 ```text
