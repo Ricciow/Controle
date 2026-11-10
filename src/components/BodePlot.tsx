@@ -2,7 +2,8 @@ import React, { useState, useRef, useMemo, useId } from 'react';
 import { BarChart2, Compass } from 'lucide-react';
 import { TransferFunction, BodeData } from '../core/types';
 import { Frequency } from '../core/frequency';
-import { asymptoteMagnitude, magnitudeAsymptotes } from '../core/bodeAsymptotes';
+import { asymptoteMagnitude, asymptotePhase, magnitudeAsymptotes, phaseBreakFrequencies, uniqueFrequencies } from '../core/bodeAsymptotes';
+import { BodeAsymptoteLayer, termColor } from './BodeAsymptoteLayer';
 import { axisTicks, panRange, zoomRange } from '../core/timePlot';
 import { usePlotDrag } from './usePlotDrag';
 import { PlotControls } from './PlotControls';
@@ -10,9 +11,6 @@ import { PlotControls } from './PlotControls';
 interface BodePlotProps {
   systems: TransferFunction[];
 }
-
-const termColors = ['#d97706', '#7c3aed', '#059669', '#e11d48', '#0284c7', '#c026d3', '#4f46e5', '#64748b'];
-const termColor = (index: number) => termColors[index % termColors.length];
 
 const formatValue = (value: number | null, unit: string) => {
   if (value === null || Number.isNaN(value)) return '—';
@@ -32,6 +30,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
   const [frequencyWindow, setFrequencyWindow] = useState<[number, number] | null>(null);
   const [verticalWindow, setVerticalWindow] = useState<{ magnitude: [number, number]; phase: [number, number] } | null>(null);
   const [showAsymptotes, setShowAsymptotes] = useState(false);
+  const [showExact, setShowExact] = useState(true);
 
   const baseSystems = useMemo(
     () => systems.filter(s => s.visible && s.analysis && s.analysis.bode),
@@ -61,13 +60,13 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
         if (w[0] < minFreq) minFreq = w[0];
         if (w[w.length - 1] > maxFreq) maxFreq = w[w.length - 1];
       }
-      magDb.forEach(m => {
+      if (showExact) magDb.forEach(m => {
         if (isFinite(m)) {
           if (m < minM) minM = m;
           if (m > maxM) maxM = m;
         }
       });
-      phaseDeg.forEach(p => {
+      if (showExact) phaseDeg.forEach(p => {
         if (isFinite(p)) {
           if (p < minP) minP = p;
           if (p > maxP) maxP = p;
@@ -77,17 +76,12 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
 
     if (!isFinite(minFreq) || minFreq <= 0) minFreq = 0.1;
     if (!isFinite(maxFreq) || maxFreq <= minFreq) maxFreq = 100;
-    if (!isFinite(minM)) minM = -40;
-    if (!isFinite(maxM)) maxM = 20;
-    if (!isFinite(minP)) minP = -270;
-    if (!isFinite(maxP)) maxP = 90;
-
     // Expand to clean whole decades for frequency
     const decMin = Math.floor(Math.log10(minFreq));
     const decMax = Math.ceil(Math.log10(maxFreq));
 
     // Include each contribution and the sum over the full displayed decades.
-    asymptotes.forEach(({ terms }) => {
+    asymptotes.forEach(({ terms, phaseTerms }) => {
       const frequencies = [10 ** decMin, 10 ** decMax, ...terms.map(term => term.cornerFrequency)
         .filter((w): w is number => w !== null && w >= 10 ** decMin && w <= 10 ** decMax)];
       frequencies.forEach(w => {
@@ -95,7 +89,19 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
         values.push(values.reduce((sum, value) => sum + value, 0));
         values.filter(Number.isFinite).forEach(value => { minM = Math.min(minM, value); maxM = Math.max(maxM, value); });
       });
+      const phaseFrequencies = [10 ** decMin, 10 ** decMax, ...phaseTerms.flatMap(phaseBreakFrequencies)]
+        .filter(w => w >= 10 ** decMin && w <= 10 ** decMax);
+      phaseFrequencies.forEach(w => {
+        const values = phaseTerms.map(term => asymptotePhase(term, w));
+        values.push(values.reduce((sum, value) => sum + value, 0));
+        values.filter(Number.isFinite).forEach(value => { minP = Math.min(minP, value); maxP = Math.max(maxP, value); });
+      });
     });
+
+    if (!isFinite(minM)) minM = -40;
+    if (!isFinite(maxM)) maxM = 20;
+    if (!isFinite(minP)) minP = -270;
+    if (!isFinite(maxP)) maxP = 90;
 
     return {
       minW: Math.pow(10, decMin),
@@ -105,7 +111,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
       minPhase: Math.floor(minP / 45) * 45 - 20,
       maxPhase: Math.ceil(maxP / 45) * 45 + 20,
     };
-  }, [activeSystems, asymptotes]);
+  }, [activeSystems, asymptotes, showExact]);
   const minW = frequencyWindow ? 10 ** frequencyWindow[0] : bounds.minW;
   const maxW = frequencyWindow ? 10 ** frequencyWindow[1] : bounds.maxW;
   const [minMag, maxMag] = verticalWindow?.magnitude ?? [bounds.minMag, bounds.maxMag];
@@ -271,8 +277,17 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
 
         <div className="flex flex-wrap items-center gap-3">
           <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+            <input type="checkbox" checked={showExact} onChange={event => {
+              setShowExact(event.target.checked);
+              if (!event.target.checked) setShowAsymptotes(true);
+              setVerticalWindow(null);
+            }} className="accent-cyan-600" />
+            Mostrar curva exata
+          </label>
+          <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
             <input type="checkbox" checked={showAsymptotes} onChange={event => {
               setShowAsymptotes(event.target.checked);
+              if (!event.target.checked) setShowExact(true);
               setVerticalWindow(null);
             }} className="accent-cyan-600" />
             Mostrar assíntotas
@@ -387,26 +402,24 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
           )}
 
           {/* Individual magnitude contributions and their piecewise-linear sum. */}
-          {asymptotes.map(({ system, terms }) => {
-            if (!terms.length) return null;
-            const frequencies = [...new Set([minW, maxW, ...terms.map(term => term.cornerFrequency)
-              .filter((w): w is number => w !== null && w > minW && w < maxW)])].sort((a, b) => a - b);
-            const path = (evaluate: (w: number) => number) => frequencies.map((w, index) =>
-              `${index === 0 ? 'M' : 'L'} ${wToX(w)} ${magToY(evaluate(w))}`).join(' ');
-            return <g key={`asymptotes-${system.id}`} clipPath={`url(#${clipId}-magnitude)`}>
-              {terms.map((term, index) => <path key={index} d={path(w => asymptoteMagnitude(term, w))}
-                fill="none" stroke={termColor(index)} strokeWidth="1.4" strokeDasharray="3 3" opacity="0.8">
-                <title>{`${system.name}: ${term.label}`}</title>
-              </path>)}
-              <path d={path(w => terms.reduce((sum, term) => sum + asymptoteMagnitude(term, w), 0))}
-                fill="none" stroke={system.color} strokeWidth="2" strokeDasharray="9 4">
-                <title>{`${system.name}: soma assintótica`}</title>
-              </path>
-            </g>;
-          })}
+          {asymptotes.map(({ system, terms, phaseTerms }) => <g key={`asymptotes-${system.id}`}>
+            <BodeAsymptoteLayer name={system.name} color={system.color} range={[minW, maxW]}
+              terms={terms.map(term => ({ label: term.label, value: w => asymptoteMagnitude(term, w) }))}
+              breaks={terms.flatMap(term => term.cornerFrequency === null ? [] : [term.cornerFrequency])}
+              toX={wToX} toY={magToY} clipId={`${clipId}-magnitude`} unit="dB"
+              plot={{ left: padding.left, right: width - padding.right, top: padding.top, bottom: padding.top + subPlotHeight }} />
+            <BodeAsymptoteLayer name={system.name} color={system.color} range={[minW, maxW]}
+              terms={phaseTerms.map(term => ({ label: term.label, value: w => asymptotePhase(term, w) }))}
+              breaks={phaseTerms.flatMap(phaseBreakFrequencies)}
+              samples={[...(phaseTerms.some(term => term.delay)
+                ? Array.from({ length: 257 }, (_, i) => 10 ** (logMinW + i / 256 * (logMaxW - logMinW))) : []),
+                ...phaseTerms.flatMap(term => term.step && term.cornerFrequency ? [term.cornerFrequency * (1 - 1e-9)] : [])]}
+              toX={wToX} toY={phaseToY} clipId={`${clipId}-phase`} unit="°"
+              plot={{ left: padding.left, right: width - padding.right, top: padding.top + subPlotHeight + gap, bottom: height - padding.bottom }} />
+          </g>)}
 
           {/* Magnitude Plots */}
-          {activeSystems.map(sys => {
+          {showExact && activeSystems.map(sys => {
             if (!sys.analysis?.bode) return null;
             const { w, magDb } = sys.analysis.bode;
             if (w.length === 0) return null;
@@ -443,7 +456,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
           })}
 
           {/* Phase Plots */}
-          {activeSystems.map(sys => {
+          {showExact && activeSystems.map(sys => {
             if (!sys.analysis?.bode) return null;
             const { w, phaseDeg } = sys.analysis.bode;
             if (w.length === 0) return null;
@@ -480,7 +493,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
           })}
 
           {/* Critical margin guides for each function. */}
-          {activeSystems.map(sys => {
+          {showExact && activeSystems.map(sys => {
             if (!sys.analysis) return null;
             const { phaseMarginDeg: pm, gainMarginDb: gm, gainCrossoverFreq: wg, phaseCrossoverFreq: wp } = sys.analysis.metrics;
             const phase = wg !== null ? getBodeAtW(sys.analysis.bode, wg).phase : 0;
@@ -563,20 +576,20 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: sys.color }} />
                     <span className="font-semibold text-slate-800 dark:text-slate-200">{sys.name}</span>
                   </div>
-                  <div className="flex justify-between text-slate-500 dark:text-slate-400 pl-3.5">
+                  {showExact && <div className="flex justify-between text-slate-500 dark:text-slate-400 pl-3.5">
                     <span>Mag:</span>
                     <span className="font-mono text-cyan-700 dark:text-cyan-300 font-semibold">{point.mag.toFixed(2)} dB</span>
-                  </div>
+                  </div>}
                   {asymptotes.filter(item => item.system.id === sys.id && item.terms.length).map(item => (
                     <div key="asymptotic" className="flex justify-between gap-2 text-slate-500 dark:text-slate-400 pl-3.5">
-                      <span>Soma assintótica{item.padeApproximation ? ' (Padé)' : ''}:</span>
-                      <span className="font-mono">{item.terms.reduce((sum, term) => sum + asymptoteMagnitude(term, currentW), 0).toFixed(2)} dB</span>
+                      <span>Soma{item.padeApproximation ? ' (Padé)' : ''}:</span>
+                      <span className="font-mono">{item.terms.reduce((sum, term) => sum + asymptoteMagnitude(term, currentW), 0).toFixed(2)} dB · {item.phaseTerms.reduce((sum, term) => sum + asymptotePhase(term, currentW), 0).toFixed(1)}°</span>
                     </div>
                   ))}
-                  <div className="flex justify-between text-slate-500 dark:text-slate-400 pl-3.5">
+                  {showExact && <div className="flex justify-between text-slate-500 dark:text-slate-400 pl-3.5">
                     <span>Fase:</span>
                     <span className="font-mono text-cyan-700 dark:text-cyan-300 font-semibold">{point.phase.toFixed(1)}°</span>
-                  </div>
+                  </div>}
                 </div>
               );
             })}
@@ -601,10 +614,13 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
       </div>
 
       {showAsymptotes && <div className="border-t border-slate-200 dark:border-slate-800 px-4 py-2 space-y-2 text-[11px] text-slate-600 dark:text-slate-400">
-        <p>As contribuições em dB se somam. Traço contínuo: magnitude exata; tracejado longo: soma assintótica; tracejado curto: componentes.</p>
-        {asymptotes.map(({ system, terms, padeApproximation }) => <div key={system.id} className="space-y-1">
+        <p>Magnitude e fase: tracejado longo = soma; tracejado curto = componentes. Os círculos e rótulos mostram os pontos de mudança e os valores da soma.</p>
+        <p>Na fase, a transição vai de ωb/10 a 10ωb (±45°/década por raiz). Fatores no eixo imaginário têm salto em ωb. SPD: semiplano direito.</p>
+        {asymptotes.map(({ system, terms, phaseTerms, padeApproximation }) => <div key={system.id} className="space-y-1">
           <p className="font-medium text-slate-800 dark:text-slate-200">{system.name}{padeApproximation ? ' — assíntotas da aproximação de Padé (ordem 4)' : ''}</p>
-          {terms.length ? <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {terms.length ? <>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <span className="font-medium">Magnitude:</span>
             <span className="inline-flex items-center gap-1.5">
               <svg width="22" height="8" aria-hidden="true"><path d="M0 4 H22" stroke={system.color} strokeWidth="2" strokeDasharray="9 4" /></svg>
               Soma assintótica
@@ -613,7 +629,32 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
               <svg width="22" height="8" aria-hidden="true"><path d="M0 4 H22" stroke={termColor(index)} strokeWidth="1.5" strokeDasharray="3 3" /></svg>
               {term.label}{term.slope !== 0 ? ` (${term.slope > 0 ? '+' : '−'}${Math.abs(term.slope)} dB/década)` : ''}
             </span>)}
-          </div> : <p>Função nula: magnitude de −∞ dB, sem assíntotas finitas.</p>}
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <span className="font-medium">Fase:</span>
+            {phaseTerms.map((term, index) => <span key={index} className="inline-flex items-center gap-1.5">
+              <svg width="22" height="8" aria-hidden="true"><path d="M0 4 H22" stroke={termColor(index)} strokeWidth="1.5" strokeDasharray="3 3" /></svg>
+              {term.label}{term.cornerFrequency !== null ? ` (${term.changeDeg > 0 ? '+' : '−'}${Math.abs(term.changeDeg)}°)` : ''}
+            </span>)}
+          </div>
+          <details>
+            <summary className="cursor-pointer py-1">Valores nos pontos de mudança</summary>
+            <div className="max-h-40 overflow-auto">
+              <table className="w-full text-left whitespace-nowrap" aria-label={`Pontos de mudança de ${system.name}`}>
+                <thead><tr><th className="pr-3">Mudança</th><th className="pr-3">ω (rad/s)</th><th className="pr-3">Soma (dB)</th><th>Soma (°)</th></tr></thead>
+                <tbody>{uniqueFrequencies([...terms.flatMap(term => term.cornerFrequency === null ? [] : [term.cornerFrequency]),
+                  ...phaseTerms.flatMap(phaseBreakFrequencies)]).map(w => <tr key={w}>
+                  <td className="pr-3">{[terms.some(term => term.cornerFrequency === w) ? 'Magnitude' : '',
+                    phaseTerms.some(term => phaseBreakFrequencies(term).includes(w)) ? 'Fase' : ''].filter(Boolean).join(' / ')}</td>
+                  <td className="pr-3 font-mono">{Number(w.toPrecision(4))}</td>
+                  <td className="pr-3 font-mono">{terms.reduce((sum, term) => sum + asymptoteMagnitude(term, w), 0).toFixed(2)}</td>
+                  <td className="font-mono">{phaseTerms.reduce((sum, term) => sum + asymptotePhase(term, w), 0).toFixed(2)}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+            {!terms.some(term => term.cornerFrequency !== null) && <p>Sem frequências de quebra finitas.</p>}
+          </details>
+          </> : <p>Função nula: magnitude de −∞ dB e fase indefinida, sem assíntotas finitas.</p>}
           {system.frequencyModel && !system.frequencyModel.unityFeedback && <p>O atraso puro contribui com 0 dB à magnitude.</p>}
         </div>)}
       </div>}

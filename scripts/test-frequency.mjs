@@ -17,7 +17,7 @@ try {
   const { Analyzer } = require(join(temporary, 'analyzer.js'));
   const { Frequency } = require(join(temporary, 'frequency.js'));
   const { Roots } = require(join(temporary, 'roots.js'));
-  const { magnitudeAsymptotes, asymptoteMagnitude } = require(join(temporary, 'bodeAsymptotes.js'));
+  const { magnitudeAsymptotes, asymptoteMagnitude, asymptotePhase, phaseBreakFrequencies } = require(join(temporary, 'bodeAsymptotes.js'));
   const { numericTransferText } = require(join(temporary, 'transferText.js'));
   const { changeInputMode } = require(join(temporary, 'poleZeroInput.js'));
   const { symbolicTransferExpression } = require(join(temporary, 'symbolicRouth.js'));
@@ -29,6 +29,23 @@ try {
   };
   const asymptotes = system => magnitudeAsymptotes(system.numerator, system.denominator, system.frequencyModel);
   const asymptoticDb = (decomposition, w) => decomposition.terms.reduce((sum, term) => sum + asymptoteMagnitude(term, w), 0);
+  const asymptoticPhase = (decomposition, w) => decomposition.phaseTerms.reduce((sum, term) => sum + asymptotePhase(term, w), 0);
+  const firstOrderPhase = asymptotes(plant('1/[s+10]'));
+  for (const [w, degrees] of [[0.1, 0], [1, 0], [10, -45], [100, -90], [1000, -90]]) {
+    close(asymptoticPhase(firstOrderPhase, w), degrees);
+  }
+  assert.deepEqual(firstOrderPhase.phaseTerms.flatMap(phaseBreakFrequencies), [1, 100]);
+  close(asymptoticPhase(asymptotes(plant('(s+10)')), 10), 45);
+  close(asymptoticPhase(asymptotes(plant('1/s^3')), 10), -270);
+  close(asymptoticPhase(asymptotes(plant('-2*s^2')), 10), 0);
+  close(asymptoticPhase(asymptotes(plant('1/[s-10]')), 10), -135);
+  close(asymptoticPhase(asymptotes(plant('s-10')), 10), 135);
+  close(asymptoticPhase(asymptotes(plant('25/[s^2+2s+25]')), 5), -90);
+  close(asymptoticPhase(asymptotes(plant('25/[s^2-2s+25]')), 50), 180);
+  const imaginaryPair = asymptotes(plant('1/[s^2+25]'));
+  close(asymptoticPhase(imaginaryPair, 4.99), 0);
+  close(asymptoticPhase(imaginaryPair, 5.01), -180);
+  assert.deepEqual(imaginaryPair.phaseTerms.flatMap(phaseBreakFrequencies), [5]);
   // Hand-calculated normalized factors: 100(s+2) / [s(s+10)].
   const factors = asymptotes(plant('100*(s+2)/[s*(s+10)]'));
   assert.equal(factors.terms.length, 4);
@@ -125,7 +142,8 @@ try {
   // Exact delay: unchanged magnitude, analytically reduced phase margin.
   const delayed = plant('10*e^(-0,2s)/[s+1]');
   assert.equal(delayed.error, null);
-  assert.deepEqual(asymptotes(delayed), asymptotes(plant('10/[s+1]')), 'Delay must not introduce Padé poles/zeros into open-loop asymptotes');
+  assert.deepEqual(asymptotes(delayed).terms, asymptotes(plant('10/[s+1]')).terms, 'Delay must not introduce Padé poles/zeros into open-loop asymptotes');
+  close(asymptoticPhase(asymptotes(delayed), 1), -45 - 0.2 * 180 / Math.PI);
   const metrics = delayed.analysis.metrics;
   close(metrics.gainCrossoverFreq, Math.sqrt(99));
   close(metrics.phaseMarginDeg, first.phaseMarginDeg - 0.2 * Math.sqrt(99) * 180 / Math.PI);
@@ -166,6 +184,7 @@ try {
     '--strict', '--esModuleInterop', '--skipLibCheck'], { encoding: 'utf8' });
   assert.equal(uiBuild.status, 0, uiBuild.stdout + uiBuild.stderr);
   const { BodePlot } = require(join(uiDirectory, 'components', 'BodePlot.js'));
+  const { BodeAsymptoteLayer } = require(join(uiDirectory, 'components', 'BodeAsymptoteLayer.js'));
   const { createElement } = require('react');
   const { renderToStaticMarkup } = require('react-dom/server');
   const cubicSystem = { ...plant('1/[s*(s+1)*(s+2)]'), id: 'cubic', name: 'Sistema cúbico' };
@@ -174,7 +193,25 @@ try {
     { ...cubicSystem, id: 'hidden', name: 'Sistema oculto', visible: false }] }));
   for (const text of ['Margem de fase (MF)', 'Margem de ganho (MG)', '15.56 dB', '∞ dB', 'ωgc', 'ωpc', 'Sistema cúbico', 'Primeira ordem']) assert.ok(html.includes(text), text);
   assert.ok(html.includes('Mostrar assíntotas') && html.includes('type="checkbox"'));
-  assert.ok(!html.includes('as assíntotas da aproximação') && !html.includes('tracejado curto: componentes'), 'Asymptotes are opt-in');
+  assert.ok(html.includes('Mostrar curva exata'));
+  assert.ok(!html.includes('data-asymptote-layer'), 'Asymptotes are opt-in');
+  const phaseLayer = renderToStaticMarkup(createElement(BodeAsymptoteLayer, {
+    name: 'Primeira ordem', color: '#06b6d4', range: [0.1, 1000],
+    terms: firstOrderPhase.phaseTerms.map(term => ({ label: term.label, value: w => asymptotePhase(term, w) })),
+    breaks: [1, 100, 100, 10000], toX: w => 100 + 50 * Math.log10(w), toY: value => 50 - value,
+    plot: { left: 0, right: 600, top: 0, bottom: 200 }, clipId: 'phase', unit: '°',
+  }));
+  assert.ok(phaseLayer.includes('data-asymptote-layer="°"') && phaseLayer.includes('soma assintótica'));
+  assert.equal((phaseLayer.match(/data-break-frequency=/g) || []).length, 2, 'Draw unique visible phase breakpoints');
+  assert.ok(phaseLayer.includes('ω=1 rad/s') && phaseLayer.includes('ω=100 rad/s'));
+  assert.ok(phaseLayer.includes('-90 °') && !phaseLayer.includes('NaN') && !phaseLayer.includes('Infinity'));
+  const magLayer = renderToStaticMarkup(createElement(BodeAsymptoteLayer, {
+    name: 'G', color: '#06b6d4', range: [0.1, 100],
+    terms: factors.terms.map(term => ({ label: term.label, value: w => asymptoteMagnitude(term, w) })),
+    breaks: [2, 10], toX: w => 100 + 50 * Math.log10(w), toY: value => 100 - value,
+    plot: { left: 0, right: 600, top: 0, bottom: 200 }, clipId: 'magnitude', unit: 'dB',
+  }));
+  assert.ok(magLayer.includes('ω=2 rad/s') && magLayer.includes('20 dB') && magLayer.includes('ω=10 rad/s'));
   assert.ok(!html.includes('Sistema oculto') && !html.includes('NaN') && !html.includes('Infinity'));
   console.log('Frequency/parser: analytic margins, asymptotic contributions and sums, repeated origins, conjugate pairs, exact delays, Padé feedback, zoom independence and input validation passed.');
 } finally {
