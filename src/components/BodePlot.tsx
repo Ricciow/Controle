@@ -357,7 +357,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
                   stroke={isZero ? '#64748b' : '#cbd5e1'}
                   className={isZero ? '' : 'dark:stroke-slate-800'}
                   strokeWidth={isZero ? 1.2 : 0.7}
-                  strokeDasharray={isZero ? '4 3' : '2 3'}
+                  strokeDasharray={isZero ? undefined : '2 3'}
                 />
                 <text x={padding.left - 8} y={y + 3.5} fill={isZero ? '#475569' : '#64748b'} className="dark:fill-slate-400 font-mono text-[9.5px] select-none" textAnchor="end">
                   {m} dB
@@ -382,7 +382,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
                   stroke={isMinus180 ? '#f43f5e' : '#cbd5e1'}
                   className={isMinus180 ? '' : 'dark:stroke-slate-800'}
                   strokeWidth={isMinus180 ? 1.2 : 0.7}
-                  strokeDasharray={isMinus180 ? '4 3' : '2 3'}
+                  strokeDasharray={p === 0 ? undefined : isMinus180 ? '4 3' : '2 3'}
                   opacity={isMinus180 ? 0.8 : 1}
                 />
                 <text x={padding.left - 8} y={y + 3.5} fill={isMinus180 ? '#e11d48' : '#64748b'} className="dark:fill-slate-400 font-mono text-[9.5px] select-none" textAnchor="end">
