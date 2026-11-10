@@ -354,10 +354,10 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
                   y1={y}
                   x2={width - padding.right}
                   y2={y}
-                  stroke={isZero ? '#64748b' : '#cbd5e1'}
+                  stroke={isZero ? '#6b7280' : '#cbd5e1'}
                   className={isZero ? '' : 'dark:stroke-slate-800'}
                   strokeWidth={isZero ? 1.2 : 0.7}
-                  strokeDasharray={isZero ? undefined : '2 3'}
+                  strokeDasharray={isZero ? (showAsymptotes ? undefined : '4 3') : '2 3'}
                 />
                 <text x={padding.left - 8} y={y + 3.5} fill={isZero ? '#475569' : '#64748b'} className="dark:fill-slate-400 font-mono text-[9.5px] select-none" textAnchor="end">
                   {m} dB
@@ -372,6 +372,7 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
             const topPhase = padding.top + subPlotHeight + gap;
             if (y < topPhase || y > topPhase + subPlotHeight) return null;
             const isMinus180 = p === -180;
+            const isZero = p === 0;
             return (
               <g key={`phase-grid-${p}`}>
                 <line
@@ -379,10 +380,10 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
                   y1={y}
                   x2={width - padding.right}
                   y2={y}
-                  stroke={isMinus180 ? '#f43f5e' : '#cbd5e1'}
-                  className={isMinus180 ? '' : 'dark:stroke-slate-800'}
-                  strokeWidth={isMinus180 ? 1.2 : 0.7}
-                  strokeDasharray={p === 0 ? undefined : isMinus180 ? '4 3' : '2 3'}
+                  stroke={isMinus180 ? '#f43f5e' : isZero ? '#6b7280' : '#cbd5e1'}
+                  className={isMinus180 || isZero ? '' : 'dark:stroke-slate-800'}
+                  strokeWidth={isMinus180 || isZero ? 1.2 : 0.7}
+                  strokeDasharray={isZero ? (showAsymptotes ? undefined : '4 3') : isMinus180 ? '4 3' : '2 3'}
                   opacity={isMinus180 ? 0.8 : 1}
                 />
                 <text x={padding.left - 8} y={y + 3.5} fill={isMinus180 ? '#e11d48' : '#64748b'} className="dark:fill-slate-400 font-mono text-[9.5px] select-none" textAnchor="end">
