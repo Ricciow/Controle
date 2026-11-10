@@ -277,20 +277,18 @@ export const BodePlot: React.FC<BodePlotProps> = ({ systems }) => {
 
         <div className="flex flex-wrap items-center gap-3">
           <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-            <input type="checkbox" checked={showExact} onChange={event => {
-              setShowExact(event.target.checked);
-              if (!event.target.checked) setShowAsymptotes(true);
-              setVerticalWindow(null);
-            }} className="accent-cyan-600" />
-            Mostrar curva exata
-          </label>
-          <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+            Mostrar assíntotas
             <input type="checkbox" checked={showAsymptotes} onChange={event => {
               setShowAsymptotes(event.target.checked);
-              if (!event.target.checked) setShowExact(true);
               setVerticalWindow(null);
             }} className="accent-cyan-600" />
-            Mostrar assíntotas
+          </label>
+          <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+            Mostrar curva exata
+            <input type="checkbox" checked={showExact} onChange={event => {
+              setShowExact(event.target.checked);
+              setVerticalWindow(null);
+            }} className="accent-cyan-600" />
           </label>
           <PlotControls onZoom={zoom} onPan={(dx, dy) => move(dx * plotWidth, dy * subPlotHeight)} onReset={() => { setFrequencyWindow(null); setVerticalWindow(null); handleMouseLeave(); }} />
         </div>
